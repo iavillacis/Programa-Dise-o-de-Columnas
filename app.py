@@ -10,6 +10,7 @@ from urllib.parse import parse_qs
 from string import Template
 import warnings
 import os
+import gc
 
 import verification
 
@@ -182,7 +183,7 @@ class DiagramaInteraccion:
         phi = self.factor_phi(et)
         return pn, mn, phi, et
 
-    def curva_interaccion(self, eje="x", n=60):
+    def curva_interaccion(self, eje="x", n=40):
         depth = self.h if eje == "x" else self.b
         c_values = np.linspace(0.01 * cm, 3.0 * depth, n)
         p_list, m_list, pp_list, mp_list = [], [], [], []
@@ -250,7 +251,7 @@ class DiagramaInteraccion:
         phi = self.factor_phi(et)
         return phi * pn, phi * mx, phi * my
 
-    def contorno_aci(self, pu, n_theta=48):
+    def contorno_aci(self, pu, n_theta=24):
         if pu <= 0:
             raise ValueError("Pu debe ser mayor que cero (compresion).")
         phi_pmax = 0.65 * self.pn_max()
@@ -259,7 +260,7 @@ class DiagramaInteraccion:
         contour = []
         for theta in np.linspace(0, 2 * np.pi, n_theta, endpoint=False):
             projection = abs(np.cos(theta)) * self.b + abs(np.sin(theta)) * self.h
-            c_values = np.geomspace(max(projection * 1e-5, 1e-7), projection * 50, 120)
+            c_values = np.geomspace(max(projection * 1e-5, 1e-7), projection * 50, 60)
             points = [self.calcular_punto_biaxial(c, theta) for c in c_values]
             candidates = []
             for (p1, mx1, my1), (p2, mx2, my2) in zip(points, points[1:]):
@@ -275,7 +276,7 @@ class DiagramaInteraccion:
 
 def plot_diagram(section, eje, pu, mu):
     pn, mn, pp, mp, pmax = section.curva_interaccion(eje)
-    fig, ax = plt.subplots(figsize=(8, 6))
+    fig, ax = plt.subplots(figsize=(7, 5.2))
     mn_neg = [-x for x in mn]
     mp_neg = [-x for x in mp]
     ax.plot([x / ton for x in mn], [x / ton for x in pn], 'k--', lw=1.5, label='Nominal')
@@ -298,7 +299,7 @@ def plot_diagram(section, eje, pu, mu):
 
 def plot_contorno_aci(contour, mux, muy):
     closed = np.vstack((contour, contour[:1]))
-    fig, ax = plt.subplots(figsize=(7, 6))
+    fig, ax = plt.subplots(figsize=(6.5, 5.5))
     ax.fill(closed[:, 0] / ton, closed[:, 1] / ton, color='#bae6fd', alpha=0.55, label='Region resistente')
     ax.plot(closed[:, 0] / ton, closed[:, 1] / ton, color='#0284c7', lw=2, label='Contorno ACI \u03c6P = Pu')
     ax.scatter([mux / ton], [muy / ton], color='red', s=52, zorder=5, label='Demanda')
@@ -315,7 +316,7 @@ def plot_contorno_aci(contour, mux, muy):
 
 
 def plot_section(section):
-    fig, ax = plt.subplots(figsize=(10, 8))
+    fig, ax = plt.subplots(figsize=(8, 6))
     ax.add_patch(plt.Rectangle((0, 0), section.b / cm, section.h / cm,
                                 fill=False, lw=3, color='#1e293b'))
     for x, y, area, dm, d in section._bars:
@@ -335,7 +336,7 @@ def plot_section(section):
 
 def fig_to_b64(fig):
     buf = BytesIO()
-    fig.savefig(buf, format='png', dpi=130, bbox_inches='tight')
+    fig.savefig(buf, format='png', dpi=90, bbox_inches='tight')
     plt.close(fig)
     return b64encode(buf.getvalue()).decode('ascii')
 
@@ -536,6 +537,8 @@ def app(environ, start_response):
         )
     except Exception as e:
         html = f'<p class="error">Error: {escape(str(e))}</p>'
+    plt.close('all')
+    gc.collect()
     body = html.encode('utf-8')
     start_response('200 OK', [('Content-Type', 'text/html; charset=utf-8')])
     return [body]
