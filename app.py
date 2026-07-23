@@ -7,6 +7,7 @@ from io import BytesIO
 from base64 import b64encode
 from html import escape
 from urllib.parse import parse_qs
+import warnings
 
 m = 1.0
 cm = 0.01 * m
@@ -285,7 +286,9 @@ def plot_diagram(section, eje, pu, mu):
     title = 'Mx' if eje == 'x' else 'My'
     ax.set(xlabel=f'{title} (tonf\u00b7m)', ylabel='P (tonf)', title=f'Diagrama P\u2013{title}')
     ax.legend(fontsize=8, loc='lower right')
-    fig.tight_layout()
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        fig.tight_layout()
     return fig
 
 
@@ -301,7 +304,9 @@ def plot_contorno_aci(contour, mux, muy):
     ax.grid(color='silver', linestyle='--', linewidth=0.5)
     ax.set(xlabel='Mx (tonf\u00b7m)', ylabel='My (tonf\u00b7m)', title='Contorno biaxial \u03c6Mx vs \u03c6My a Pu dado')
     ax.legend(fontsize=8)
-    fig.tight_layout()
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        fig.tight_layout()
     return fig
 
 
@@ -318,7 +323,9 @@ def plot_section(section):
     ax.invert_yaxis()
     ax.set(xlabel='B (cm)', ylabel='H (cm)', title='Distribucion de acero longitudinal (diametros en mm)')
     ax.grid(alpha=0.2)
-    fig.tight_layout()
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        fig.tight_layout()
     return fig
 
 
