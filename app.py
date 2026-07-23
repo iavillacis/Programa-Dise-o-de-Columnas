@@ -357,17 +357,17 @@ pu_i = pu * ton
 mux_i = mux * ton * m
 muy_i = muy * ton * m
 
-tabs = st.tabs(['Diagramas P\u2013M', 'Biaxial ACI', 'Geometr\u00eda'])
+st.subheader('Diagramas de interacci\u00f3n P\u2013M')
+col1, col2 = st.columns(2)
+with col1:
+    st.pyplot(plot_diagram(section, 'x', pu_i, mux_i), use_container_width=True)
+with col2:
+    st.pyplot(plot_diagram(section, 'y', pu_i, muy_i), use_container_width=True)
+st.caption('Curva nominal (negro discontinuo), curva \u03c6 (azul), l\u00edmite \u03c6Pn,max (naranja) y punto de demanda (rojo).')
 
-with tabs[0]:
-    col1, col2 = st.columns(2)
-    with col1:
-        st.pyplot(plot_diagram(section, 'x', pu_i, mux_i), use_container_width=True)
-    with col2:
-        st.pyplot(plot_diagram(section, 'y', pu_i, muy_i), use_container_width=True)
-    st.caption('Curva nominal (negro discontinuo), curva \u03c6 (azul), l\u00edmite \u03c6Pn,max (naranja) y punto de demanda (rojo).')
-
-with tabs[1]:
+es_biaxial = abs(muy) > 0.01
+if es_biaxial:
+    st.subheader('Verificaci\u00f3n biaxial ACI 318-19')
     try:
         contour = section.contorno_aci(pu_i)
         col1, col2 = st.columns([3, 2])
@@ -375,16 +375,15 @@ with tabs[1]:
             fig = plot_contorno_aci(contour, mux_i, muy_i)
             st.pyplot(fig, use_container_width=True)
         with col2:
-            st.subheader('Verificaci\u00f3n biaxial ACI')
             mx_uni = float(np.max(np.abs(contour[:, 0]))) if len(contour) else 0
             my_uni = float(np.max(np.abs(contour[:, 1]))) if len(contour) else 0
+            st.metric('\u03c6Mnx (uniaxial en Pu)', f'{mx_uni / ton:,.3f} tonf\u00b7m')
+            st.metric('\u03c6Mny (uniaxial en Pu)', f'{my_uni / ton:,.3f} tonf\u00b7m')
             dx, dy = mux_i, muy_i
             radial = np.hypot(dx, dy)
             cap_radial = np.hypot(mx_uni, my_uni)
             ratio = radial / cap_radial if cap_radial > 0 else 999
-            st.metric('\u03c6Mnx (uniaxial)', f'{mx_uni / ton:,.3f} tonf\u00b7m')
-            st.metric('\u03c6Mny (uniaxial)', f'{my_uni / ton:,.3f} tonf\u00b7m')
-            st.metric('Relaci\u00f3n D/C', f'{ratio:.3f}')
+            st.metric('Relaci\u00f3n D/C (radial)', f'{ratio:.3f}')
             if ratio <= 1:
                 st.success('CUMPLE \u2014 La demanda est\u00e1 dentro del contorno ACI.')
             else:
@@ -393,23 +392,22 @@ with tabs[1]:
     except Exception as e:
         st.error(f'No se pudo calcular el contorno biaxial: {e}')
 
-with tabs[2]:
-    c1, c2 = st.columns([1, 1])
-    with c1:
-        st.pyplot(plot_section(section), use_container_width=True)
-    with c2:
-        st.subheader('Propiedades')
-        data = {
-            'Propiedad': ['Ag', 'Ast', '\u03c1', 'P0 nominal', 'Pn,max nominal', '\u03c6Pn,max'],
-            'Valor': [f'{section.ag() / cm**2:.2f} cm\u00b2',
-                      f'{section.ast() / cm**2:.2f} cm\u00b2',
-                      f'{section.rho():.3%}',
-                      f'{section.p0() / ton:,.2f} tonf',
-                      f'{section.pn_max() / ton:,.2f} tonf',
-                      f'{0.65 * section.pn_max() / ton:,.2f} tonf'],
-        }
-        st.table(pd.DataFrame(data))
-        st.subheader('Matriz de barras')
-        st.dataframe(pd.DataFrame(raw_matrix), use_container_width=True, hide_index=True)
+st.subheader('Geometr\u00eda de la secci\u00f3n')
+c1, c2 = st.columns([1, 1])
+with c1:
+    st.pyplot(plot_section(section), use_container_width=True)
+with c2:
+    data = {
+        'Propiedad': ['Ag', 'Ast', '\u03c1', 'P0 nominal', 'Pn,max nominal', '\u03c6Pn,max'],
+        'Valor': [f'{section.ag() / cm**2:.2f} cm\u00b2',
+                  f'{section.ast() / cm**2:.2f} cm\u00b2',
+                  f'{section.rho():.3%}',
+                  f'{section.p0() / ton:,.2f} tonf',
+                  f'{section.pn_max() / ton:,.2f} tonf',
+                  f'{0.65 * section.pn_max() / ton:,.2f} tonf'],
+    }
+    st.table(pd.DataFrame(data))
+    st.subheader('Matriz de barras')
+    st.dataframe(pd.DataFrame(raw_matrix), use_container_width=True, hide_index=True)
 
-st.caption('\u03b5cu = 0.003, bloque rectangular de Whitney, acero elastopl\u00e1stico perfecto. Columnas con estribos (\u03c6 = 0.65 en compresi\u00f3n).')
+st.caption('\u03b5cu = 0.003, bloque rectangular de Whitney, acero elastopl\u00e1stico perfecto. Columnas con estribos (\u03c6 = 0.65 en compresi\u00f3n controlada).')
