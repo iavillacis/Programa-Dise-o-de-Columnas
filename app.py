@@ -160,6 +160,84 @@ class DiagramaInteraccion:
         pmax = self.pn_max()
         return p_list, m_list, pp_list, mp_list, pmax
 
+    @staticmethod
+    def _clip_polygon(polygon, nx, ny, limit):
+        clipped = []
+        for first, second in zip(polygon, polygon[1:] + polygon[:1]):
+            q1 = nx * first[0] + ny * first[1]
+            q2 = nx * second[0] + ny * second[1]
+            inside1 = q1 >= limit - 1e-12
+            inside2 = q2 >= limit - 1e-12
+            if inside1:
+                clipped.append(first)
+            if inside1 != inside2:
+                t = (limit - q1) / (q2 - q1) if q2 != q1 else 0
+                clipped.append((first[0] + t * (second[0] - first[0]),
+                                first[1] + t * (second[1] - first[1])))
+        return clipped
+
+    @staticmethod
+    def _polygon_area_centroid(polygon):
+        cross = [x1 * y2 - x2 * y1 for (x1, y1), (x2, y2) in zip(polygon, polygon[1:] + polygon[:1])]
+        twice = sum(cross)
+        if abs(twice) < 1e-14:
+            return 0.0, 0.0, 0.0
+        cx = sum((x1 + x2) * v for (x1, y1), (x2, y2), v in zip(polygon, polygon[1:] + polygon[:1], cross)) / (3 * twice)
+        cy = sum((y1 + y2) * v for (x1, y1), (x2, y2), v in zip(polygon, polygon[1:] + polygon[:1], cross)) / (3 * twice)
+        return abs(twice) / 2, cx, cy
+
+    def calcular_punto_biaxial(self, c, theta):
+        nx = float(np.cos(theta))
+        ny = float(np.sin(theta))
+        corners = [(0.0, 0.0), (self.b, 0.0), (self.b, self.h), (0.0, self.h)]
+        q_max = max(nx * x + ny * y for x, y in corners)
+        q_min = min(nx * x + ny * y for x, y in corners)
+        projection = q_max - q_min
+        beta = self.vg.beta1(self.fc)
+        a = min(beta * c, projection)
+        block = self._clip_polygon(corners, nx, ny, q_max - a)
+        area, x_c, y_c = self._polygon_area_centroid(block)
+        cc = 0.85 * self.fc * area
+        pn = cc
+        mx = cc * (self.h / 2 - y_c)
+        my = cc * (self.b / 2 - x_c)
+        strains = []
+        for x, y, as_i, n, db in self._bars:
+            depth = q_max - (nx * x + ny * y)
+            strain = 0.003 * (c - depth) / c
+            fs = self.vg.esfuerzo_acero(self.fy, strain)
+            force = as_i * fs
+            pn += force
+            mx += force * (self.h / 2 - y)
+            my += force * (self.b / 2 - x)
+            if strain < 0:
+                strains.append(abs(strain))
+        et = max(strains) if strains else 0.0
+        phi = self.factor_phi(et)
+        return phi * pn, phi * mx, phi * my
+
+    def contorno_aci(self, pu, n_theta=48):
+        if pu <= 0:
+            raise ValueError("Pu debe ser mayor que cero (compresion).")
+        phi_pmax = 0.65 * self.pn_max()
+        if pu > phi_pmax:
+            raise ValueError(f"Pu excede \u03c6Pn,max ({phi_pmax / ton:.2f} tonf).")
+        contour = []
+        for theta in np.linspace(0, 2 * np.pi, n_theta, endpoint=False):
+            projection = abs(np.cos(theta)) * self.b + abs(np.sin(theta)) * self.h
+            c_values = np.geomspace(max(projection * 1e-5, 1e-7), projection * 50, 120)
+            points = [self.calcular_punto_biaxial(c, theta) for c in c_values]
+            candidates = []
+            for (p1, mx1, my1), (p2, mx2, my2) in zip(points, points[1:]):
+                if (p1 - pu) * (p2 - pu) <= 0 and p1 != p2:
+                    t = (pu - p1) / (p2 - p1)
+                    candidates.append((mx1 + t * (mx2 - mx1), my1 + t * (my2 - my1)))
+            if candidates:
+                contour.append(max(candidates, key=lambda pt: np.hypot(*pt)))
+        if len(contour) < 8:
+            raise ValueError("No se pudo formar el contorno; revise los datos.")
+        return np.asarray(contour)
+
 
 def plot_diagram(section, eje, pu, mu):
     pn, mn, pp, mp, pmax = section.curva_interaccion(eje)
@@ -189,15 +267,7 @@ def plot_diagram(section, eje, pu, mu):
     return fig
 
 
-def plot_contorno_aci(section, pu, mux, muy):
-    try:
-        contour_data = section.contorno_aci(pu)
-    except Exception:
-        fig, ax = plt.subplots(figsize=(6.5, 5))
-        ax.text(0.5, 0.5, 'No se pudo generar el contorno\npara el nivel de carga dado',
-                ha='center', va='center', transform=ax.transAxes)
-        return fig
-    contour = np.asarray(contour_data)
+def plot_contorno_aci(contour, mux, muy):
     closed = np.vstack((contour, contour[:1]))
     fig, ax = plt.subplots(figsize=(6.5, 5.2))
     ax.fill(closed[:, 0] / ton, closed[:, 1] / ton, color='#bae6fd', alpha=0.55, label='Regi\u00f3n resistente')
@@ -299,15 +369,13 @@ with tabs[0]:
 
 with tabs[1]:
     try:
-        from urllib.parse import parse_qs
+        contour = section.contorno_aci(pu_i)
         col1, col2 = st.columns([3, 2])
         with col1:
-            fig = plot_contorno_aci(section, pu_i, mux_i, muy_i)
+            fig = plot_contorno_aci(contour, mux_i, muy_i)
             st.pyplot(fig, use_container_width=True)
         with col2:
             st.subheader('Verificaci\u00f3n biaxial ACI')
-            biaxial = section.contorno_aci(pu_i)
-            contour = np.asarray(biaxial)
             mx_uni = float(np.max(np.abs(contour[:, 0]))) if len(contour) else 0
             my_uni = float(np.max(np.abs(contour[:, 1]))) if len(contour) else 0
             dx, dy = mux_i, muy_i
