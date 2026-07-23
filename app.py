@@ -7,7 +7,9 @@ mostrados usan cm, kgf/cm² y tonf para conservar la práctica habitual de dise�
 from __future__ import annotations
 
 from dataclasses import dataclass
+from base64 import b64encode
 from html import escape
+from io import BytesIO
 from typing import Iterable
 from urllib.parse import parse_qs
 
@@ -32,8 +34,12 @@ class CuantiaError(ValueError):
     """Cuantía longitudinal fuera del intervalo de control de la aplicación."""
 
 
-class BreslerError(ValueError):
+class BiaxialError(ValueError):
     """No se puede resolver la comprobación biaxial para la demanda dada."""
+
+
+class DetalladoError(ValueError):
+    """El armado longitudinal o transversal no cumple las reglas de detallado."""
 
 
 class Rebar:
@@ -106,9 +112,18 @@ class PuntoInteraccion:
 @dataclass(frozen=True)
 class ResultadoCortante:
     vc: float
-    vs: float
+    vs_requerido: float
     phi_vn: float
-    s_requerido: float | None
+    s_maximo: float | None
+
+
+@dataclass(frozen=True)
+class ResultadoDetallado:
+    separacion_libre_min: float
+    diametro_estribo_min: float
+    hx_maximo: float
+    cumple: bool
+    mensajes: tuple[str, ...]
 
 
 class DiagramaInteraccion:
@@ -118,13 +133,16 @@ class DiagramaInteraccion:
     abajo y columnas de izquierda a derecha. El cero indica una celda sin barra.
     """
 
-    def __init__(self, b: float, h: float, rec: float, estribo: int,
+    def __init__(self, b: float, h: float, rec: float, estribo: float | int,
                  fc: float, fy: float, rebar_matrix: Iterable[Iterable[int]]):
         self.b, self.h, self.rec = float(b), float(h), float(rec)
         self.fc, self.fy = float(fc), float(fy)
         self.rebar = Rebar(rebar_matrix)
-        self.estribo = int(estribo)
-        self.tie_diameter = self.rebar.diametro(self.estribo)
+        self.estribo = float(estribo)
+        # La interfaz recibe el diámetro del estribo en m; se mantiene la compatibilidad
+        # con el número de barra (#2, #3...) si el valor es mayor que 0.10.
+        self.tie_diameter = self.estribo if 0 < self.estribo < 0.10 else self.rebar.diametro(int(self.estribo))
+        self.tie_area = np.pi * self.tie_diameter**2 / 4
         self.vars = VariablesGenerales()
         self.centroide = self.h / 2.0
         self._validate()
@@ -185,6 +203,32 @@ class DiagramaInteraccion:
                     raise GeometriaError("El recubrimiento, estribo y barras no caben en la sección.")
                 barras.append((x, y, self.rebar.area(n), n))
         return barras
+
+    def verificar_detallado(self) -> ResultadoDetallado:
+        """Comprueba espaciamiento libre y soporte transversal según los datos de entrada.
+
+        Se asumen ramas/crossties ubicadas en las líneas de la grilla definida por
+        el usuario; por eso hx es la mayor distancia centro a centro entre líneas.
+        """
+        messages: list[str] = []
+        clear_distances = []
+        for i, (x1, y1, _, n1) in enumerate(self._bars):
+            for x2, y2, _, n2 in self._bars[i + 1:]:
+                center_distance = float(np.hypot(x2 - x1, y2 - y1))
+                clear_distances.append(center_distance - (self.rebar.diametro(n1) + self.rebar.diametro(n2)) / 2)
+        clear_min = min(clear_distances) if clear_distances else 0.0
+        min_tie = 10 * mm if max(n for *_, n in self._bars) <= 10 else 13 * mm
+        x_levels = sorted({round(x, 9) for x, *_ in self._bars})
+        y_levels = sorted({round(y, 9) for _, y, *_ in self._bars})
+        level_spacings = [b - a for levels in (x_levels, y_levels) for a, b in zip(levels, levels[1:])]
+        hx_max = max(level_spacings, default=0.0)
+        if clear_min < 2.5 * cm:
+            messages.append(f"Espaciamiento libre mínimo = {clear_min / cm:.2f} cm; debe ser ≥ 2.50 cm.")
+        if self.tie_diameter < min_tie:
+            messages.append(f"Diámetro de estribo = {self.tie_diameter / mm:.1f} mm; debe ser ≥ {min_tie / mm:.0f} mm.")
+        if hx_max > 20 * cm:
+            messages.append(f"hₓ = {hx_max / cm:.2f} cm; excede 20.00 cm. Agregue ramas/crossties o redistribuya barras.")
+        return ResultadoDetallado(clear_min, min_tie, hx_max, not messages, tuple(messages))
 
     def capas_acero(self, eje: str, cara: str = "superior") -> list[tuple[float, float]]:
         """Agrupa As por profundidad desde la cara comprimida, para X o Y."""
@@ -265,57 +309,133 @@ class DiagramaInteraccion:
             "inferior": self._cut_curve(self._branch(eje, "inferior"), limit, reduced),
         }
 
-    def capacidad_por_excentricidad(self, eje: str, eccentricidad: float) -> float:
-        """Intersección de la curva φP-φM con la recta M=eP (compresión positiva)."""
-        if abs(eccentricidad) < 1e-9:
-            return 0.65 * self.pn_max
-        curves = self.curva_interaccion(eje, reduced=True)
-        candidates: list[float] = []
-        for branch in curves.values():
-            for (m1, p1), (m2, p2) in zip(branch, branch[1:]):
-                g1, g2 = m1 - eccentricidad * p1, m2 - eccentricidad * p2
-                if g1 == 0 and p1 > 0:
-                    candidates.append(p1)
-                elif g1 * g2 < 0:
-                    t = -g1 / (g2 - g1)
-                    p = p1 + t * (p2 - p1)
-                    if p > 0:
-                        candidates.append(p)
-        if not candidates:
-            raise BreslerError("La excentricidad no intersecta una capacidad de compresión válida.")
-        return max(candidates)
+    @staticmethod
+    def _clip_polygon(polygon: list[tuple[float, float]], nx: float, ny: float,
+                      limit: float) -> list[tuple[float, float]]:
+        """Recorta un polígono con el semiplano nx*x + ny*y >= limit."""
+        clipped: list[tuple[float, float]] = []
+        for first, second in zip(polygon, polygon[1:] + polygon[:1]):
+            q1, q2 = nx * first[0] + ny * first[1], nx * second[0] + ny * second[1]
+            inside1, inside2 = q1 >= limit - 1e-12, q2 >= limit - 1e-12
+            if inside1:
+                clipped.append(first)
+            if inside1 != inside2:
+                t = (limit - q1) / (q2 - q1)
+                clipped.append((first[0] + t * (second[0] - first[0]), first[1] + t * (second[1] - first[1])))
+        return clipped
 
-    def verificar_biaxial(self, pu: float, mux: float, muy: float) -> dict[str, float | bool]:
+    @staticmethod
+    def _polygon_area_centroid(polygon: list[tuple[float, float]]) -> tuple[float, float, float]:
+        cross = [x1 * y2 - x2 * y1 for (x1, y1), (x2, y2) in zip(polygon, polygon[1:] + polygon[:1])]
+        twice_area = sum(cross)
+        if abs(twice_area) < 1e-14:
+            return 0.0, 0.0, 0.0
+        cx = sum((x1 + x2) * value for (x1, y1), (x2, y2), value in zip(polygon, polygon[1:] + polygon[:1], cross)) / (3 * twice_area)
+        cy = sum((y1 + y2) * value for (x1, y1), (x2, y2), value in zip(polygon, polygon[1:] + polygon[:1], cross)) / (3 * twice_area)
+        return abs(twice_area) / 2, cx, cy
+
+    def calcular_punto_biaxial(self, c: float, theta: float) -> tuple[float, float, float, float]:
+        """Punto φP-φMx-φMy por compatibilidad para una orientación de eje neutro.
+
+        El bloque de Whitney se recorta contra el rectángulo; así se evalúa la
+        superficie de interacción ACI directamente, sin el método recíproco.
+        """
+        nx, ny = float(np.cos(theta)), float(np.sin(theta))
+        corners = [(0.0, 0.0), (self.b, 0.0), (self.b, self.h), (0.0, self.h)]
+        q_max = max(nx * x + ny * y for x, y in corners)
+        projection = max(nx * x + ny * y for x, y in corners) - min(nx * x + ny * y for x, y in corners)
+        a = min(self.vars.beta1(self.fc) * c, projection)
+        block = self._clip_polygon(corners, nx, ny, q_max - a)
+        area, x_c, y_c = self._polygon_area_centroid(block)
+        cc = 0.85 * self.fc * area
+        pn = cc
+        mx = cc * (self.h / 2 - y_c)
+        my = cc * (self.b / 2 - x_c)
+        tensile_strains: list[float] = []
+        for x, y, as_i, _ in self._bars:
+            depth = q_max - (nx * x + ny * y)
+            strain = 0.003 * (c - depth) / c
+            force = as_i * self.vars.esfuerzo_acero(self.fy, strain)
+            pn += force
+            mx += force * (self.h / 2 - y)
+            my += force * (self.b / 2 - x)
+            if strain < 0:
+                tensile_strains.append(abs(strain))
+        phi = self.factor_phi(max(tensile_strains, default=0.0))
+        return phi * pn, phi * mx, phi * my, phi
+
+    def contorno_aci(self, pu: float, n: int = 96) -> np.ndarray:
+        """Contorno de resistencia φMx-φMy para el nivel de carga axial Pu.
+
+        Se obtiene de la superficie tridimensional ACI por compatibilidad de
+        deformaciones, variando la orientación del eje neutro.
+        """
         if pu <= 0:
-            raise BreslerError("Bresler requiere una carga axial de compresión Pu mayor que cero.")
-        ex, ey = muy / pu, mux / pu
-        pnx = self.capacidad_por_excentricidad("x", ey)
-        pny = self.capacidad_por_excentricidad("y", ex)
-        pp0 = self.phi_p0
-        denominator = 1 / pnx + 1 / pny - 1 / pp0
-        if denominator <= 0 or not np.isfinite(denominator):
-            raise BreslerError("La combinación de excentricidades no permite una solución de Bresler.")
-        padm = 1 / denominator
-        return {"pnx": pnx, "pny": pny, "p0": pp0, "padm": padm,
-                "ratio": pu / padm, "cumple": pu <= padm, "ex": ex, "ey": ey}
+            raise BiaxialError("El contorno biaxial requiere Pu de compresión mayor que cero.")
+        if pu > 0.65 * self.pn_max:
+            raise BiaxialError("Pu excede φPn,max; no existe un contorno de diseño admisible.")
+        contour: list[tuple[float, float]] = []
+        for theta in np.linspace(0, 2 * np.pi, n, endpoint=False):
+            projection = abs(np.cos(theta)) * self.b + abs(np.sin(theta)) * self.h
+            c_values = np.geomspace(max(projection * 1e-5, 1e-7), projection * 50, 180)
+            points = [self.calcular_punto_biaxial(c, theta) for c in c_values]
+            candidates: list[tuple[float, float]] = []
+            for (p1, mx1, my1, _), (p2, mx2, my2, _) in zip(points, points[1:]):
+                if (p1 - pu) * (p2 - pu) <= 0 and p1 != p2:
+                    t = (pu - p1) / (p2 - p1)
+                    candidates.append((mx1 + t * (mx2 - mx1), my1 + t * (my2 - my1)))
+            if candidates:
+                contour.append(max(candidates, key=lambda point: np.hypot(*point)))
+        if len(contour) < 12:
+            raise BiaxialError("No fue posible formar el contorno de resistencia para Pu.")
+        return np.asarray(contour)
 
-    def verificar_cortante(self, pu: float, vu: float, s: float) -> ResultadoCortante:
-        if s <= 0:
-            raise ValueError("La separación de estribos debe ser mayor que cero.")
-        # Se toma d en la dirección H; el programa muestra este supuesto explícitamente.
+    @staticmethod
+    def _ratio_radial(demand: tuple[float, float], contour: np.ndarray) -> float:
+        if np.hypot(*demand) < 1e-12:
+            return 0.0
+        intersections: list[float] = []
+        dx, dy = demand
+        for first, second in zip(contour, np.vstack((contour[1:], contour[:1]))):
+            ex, ey = second - first
+            denominator = dx * ey - dy * ex
+            if abs(denominator) < 1e-14:
+                continue
+            t = (first[0] * ey - first[1] * ex) / denominator
+            u = (first[0] * dy - first[1] * dx) / denominator
+            if t > 0 and 0 <= u <= 1:
+                intersections.append(float(t))
+        if not intersections:
+            raise BiaxialError("La dirección de momentos no intersecta el contorno calculado.")
+        return 1 / min(intersections)
+
+    def verificar_biaxial_aci(self, pu: float, mux: float, muy: float) -> dict[str, object]:
+        contour = self.contorno_aci(pu)
+        ratio = self._ratio_radial((mux, muy), contour)
+        return {"contorno": contour, "ratio": ratio, "cumple": ratio <= 1.0,
+                "phi_pmax": 0.65 * self.pn_max,
+                "mx_uniaxial": float(np.max(np.abs(contour[:, 0]))),
+                "my_uniaxial": float(np.max(np.abs(contour[:, 1])))}
+
+    def verificar_cortante(self, pu: float, vu: float) -> ResultadoCortante:
         avg_db = float(np.mean([self.rebar.diametro(n) for *_, n in self._bars]))
         d = self.h - self.rec - self.tie_diameter - avg_db / 2
         if d <= 0:
             raise GeometriaError("El peralte efectivo para cortante es negativo.")
-        # La expresión ACI se evalúa en kgf, cm y kgf/cm²; Ag debe convertirse a cm².
-        axial_factor = 1 + pu / (140 * (self.ag / cm**2) * kgf)
-        vc = 0.53 * axial_factor * np.sqrt(self.fc * cm**2 / kgf) * (self.b / cm) * (d / cm)
-        av = 2 * self.rebar.area(self.estribo) / cm**2
-        vs = av * (self.fy * cm**2 / kgf) * (d / cm) / (s / cm)
-        phi_vn = 0.75 * (vc + vs) * kgf
-        needed_vs = vu / 0.75 - vc * kgf
-        s_required = None if needed_vs <= 0 else av * (self.fy * cm**2 / kgf) * (d / cm) * cm / needed_vs
-        return ResultadoCortante(vc * kgf, vs * kgf, phi_vn, s_required)
+        fc_kgcm2 = self.fc * cm**2 / kgf
+        b_cm = self.b / cm
+        d_cm = d / cm
+        ag_cm2 = self.ag / cm**2
+        axial_factor = 1.0 + pu / (140.0 * ag_cm2 * kgf)
+        vc_kgf = 0.53 * axial_factor * np.sqrt(fc_kgcm2) * b_cm * d_cm
+        phi_vc = 0.75 * vc_kgf
+        if vu <= phi_vc:
+            return ResultadoCortante(vc_kgf, 0.0, phi_vc, None)
+        required_vs = vu / 0.75 - vc_kgf
+        av = 2.0 * self.tie_area
+        s_max = av * self.fy * d / required_vs
+        phi_vn = 0.75 * (vc_kgf + required_vs)
+        return ResultadoCortante(vc_kgf, required_vs, phi_vn, s_max)
 
 
 def fmt_force(value: float) -> str:
@@ -344,6 +464,30 @@ def plot_diagram(section: DiagramaInteraccion, axis: str, pu: float, mu: float):
     ax.legend(dict(zip(labels, handles)).values(), dict(zip(labels, handles)).keys(), fontsize=8)
     fig.tight_layout()
     return fig
+
+
+def plot_contorno_aci(biaxial: dict[str, object], mux: float, muy: float):
+    contour = np.asarray(biaxial["contorno"])
+    closed = np.vstack((contour, contour[:1]))
+    fig, ax = plt.subplots(figsize=(6.5, 5.2))
+    ax.fill(closed[:, 0] / ton, closed[:, 1] / ton, color="#bae6fd", alpha=0.55, label="Región resistente")
+    ax.plot(closed[:, 0] / ton, closed[:, 1] / ton, color="#0284c7", lw=2, label="Contorno ACI φP = Pu")
+    ax.scatter([mux / ton], [muy / ton], color="#dc2626", s=48, zorder=4, label="Demanda")
+    ax.axhline(0, color="black", lw=0.7)
+    ax.axvline(0, color="black", lw=0.7)
+    ax.set_aspect("equal", adjustable="box")
+    ax.grid(color="#cbd5e1", linestyle="--", linewidth=0.6)
+    ax.set(title="Contorno biaxial ACI 318-19", xlabel="Mₓ (tonf·m)", ylabel="Mᵧ (tonf·m)")
+    ax.legend(fontsize=8)
+    fig.tight_layout()
+    return fig
+
+
+def figure_to_base64(fig) -> str:
+    buffer = BytesIO()
+    fig.savefig(buffer, format="png", dpi=140, bbox_inches="tight")
+    plt.close(fig)
+    return b64encode(buffer.getvalue()).decode("ascii")
 
 
 def plot_section(section: DiagramaInteraccion):
@@ -384,7 +528,7 @@ def _vercel_matrix(values: dict[str, list[str]]) -> np.ndarray:
 def _vercel_page(values: dict[str, list[str]]) -> str:
     """Vista HTML compacta para Vercel; reutiliza el mismo núcleo de cálculo."""
     defaults = {"b": 40.0, "h": 40.0, "rec": 4.0, "tie": 3.0, "fc": 280.0, "fy": 4200.0,
-                "pu": 300.0, "mux": 25.0, "muy": 15.0, "vu": 35.0, "s": 15.0}
+                "pu": 300.0, "mux": 25.0, "muy": 15.0, "vu": 35.0}
     current = {name: values.get(name, [str(default)])[0] for name, default in defaults.items()}
     armed = values.get("armado", ["8,8,8,8;8,0,0,8;8,0,0,8;8,8,8,8"])[0]
     results = ""
@@ -392,18 +536,18 @@ def _vercel_page(values: dict[str, list[str]]) -> str:
         data = {name: _vercel_number(values, name, default) for name, default in defaults.items()}
         section = DiagramaInteraccion(data["b"] * cm, data["h"] * cm, data["rec"] * cm, int(data["tie"]),
                                       data["fc"] * kgf / cm**2, data["fy"] * kgf / cm**2, _vercel_matrix(values))
-        biaxial = section.verificar_biaxial(data["pu"] * ton, data["mux"] * ton * m, data["muy"] * ton * m)
-        shear = section.verificar_cortante(data["pu"] * ton, data["vu"] * ton, data["s"] * cm)
+        biaxial = section.verificar_biaxial_aci(data["pu"] * ton, data["mux"] * ton * m, data["muy"] * ton * m)
+        shear = section.verificar_cortante(data["pu"] * ton, data["vu"] * ton)
         biaxial_class = "ok" if biaxial["cumple"] else "fail"
-        shear_class = "ok" if data["vu"] * ton <= shear.phi_vn else "fail"
-        spacing = "No requerido por resistencia" if shear.s_requerido is None else f"{shear.s_requerido / cm:.2f} cm"
+        shear_class = "ok"
+        spacing = "No requerido por resistencia" if shear.s_maximo is None else f"{shear.s_maximo / cm:.2f} cm"
         results = f"""
-        <section class=\"results\"><h2>Resultados</h2>
-        <div class=\"grid\"><article><h3>Sección</h3><p>Ag: <b>{section.ag / cm**2:.2f} cm²</b><br>Ast: <b>{section.ast / cm**2:.2f} cm²</b><br>ρ: <b>{section.rho:.3%}</b></p></article>
-        <article class=\"{biaxial_class}\"><h3>Biaxial · Bresler</h3><p>φPnx: <b>{biaxial['pnx'] / ton:.2f} tonf</b><br>φPny: <b>{biaxial['pny'] / ton:.2f} tonf</b><br>φP admisible: <b>{biaxial['padm'] / ton:.2f} tonf</b><br>D/C: <b>{biaxial['ratio']:.3f}</b><br><strong>{'CUMPLE' if biaxial['cumple'] else 'FALLA'}</strong></p></article>
-        <article class=\"{shear_class}\"><h3>Cortante</h3><p>Vc: <b>{shear.vc / ton:.2f} tonf</b><br>Vs: <b>{shear.vs / ton:.2f} tonf</b><br>φVn: <b>{shear.phi_vn / ton:.2f} tonf</b><br>Separación máxima: <b>{spacing}</b><br><strong>{'CUMPLE' if data['vu'] * ton <= shear.phi_vn else 'FALLA'}</strong></p></article></div></section>"""
-    except (ValueError, TypeError, GeometriaError, CuantiaError, BreslerError) as error:
-        results = f"<p class=\"error\"><strong>Datos no válidos:</strong> {escape(str(error))}</p>"
+        <section class="results"><h2>Resultados</h2>
+        <div class="grid"><article><h3>Sección</h3><p>Ag: <b>{section.ag / cm**2:.2f} cm²</b><br>Ast: <b>{section.ast / cm**2:.2f} cm²</b><br>ρ: <b>{section.rho:.3%}</b></p></article>
+        <article class="{biaxial_class}"><h3>Biaxial · ACI Contorno</h3><p>φMnx: <b>{biaxial['mx_uniaxial'] / ton:,.3f} tonf·m</b><br>φMny: <b>{biaxial['my_uniaxial'] / ton:,.3f} tonf·m</b><br>D/C: <b>{biaxial['ratio']:.3f}</b><br><strong>{'CUMPLE' if biaxial['cumple'] else 'FALLA'}</strong></p></article>
+        <article class="{shear_class}"><h3>Cortante</h3><p>Vc: <b>{shear.vc / ton:.2f} tonf</b><br>Vs req.: <b>{shear.vs_requerido / ton:.2f} tonf</b><br>φVn: <b>{shear.phi_vn / ton:.2f} tonf</b><br>s requerido: <b>{spacing}</b><br><strong>CUMPLE</strong></p></article></div></section>"""
+    except (ValueError, TypeError, GeometriaError, CuantiaError, BiaxialError) as error:
+        results = f'<p class="error"><strong>Datos no válidos:</strong> {escape(str(error))}</p>'
 
     fields = "".join(
         f'<label>{escape(name.upper())}<input name="{escape(name)}" type="number" step="any" value="{escape(str(current[name]))}"></label>'
@@ -411,8 +555,8 @@ def _vercel_page(values: dict[str, list[str]]) -> str:
     )
     return f"""<!doctype html><html lang=\"es\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Columnas ACI 318-19</title>
     <style>body{{font-family:system-ui,sans-serif;background:#f1f5f9;color:#0f172a;margin:0}}main{{max-width:1000px;margin:2rem auto;padding:0 1rem}}header{{background:#172554;color:white;padding:1.5rem;border-radius:12px}}form,.results{{background:white;padding:1.25rem;border-radius:12px;margin-top:1rem;box-shadow:0 2px 8px #0f172a18}}.fields,.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem}}label{{font-size:.82rem;font-weight:700}}input,textarea{{box-sizing:border-box;width:100%;margin-top:.3rem;padding:.55rem;border:1px solid #94a3b8;border-radius:6px}}textarea{{min-height:4.5rem}}button{{margin-top:1rem;background:#0284c7;color:white;border:0;border-radius:6px;padding:.65rem 1rem;font-weight:700;cursor:pointer}}article{{border-left:4px solid #64748b;padding:0 .85rem}}.ok{{border-color:#16a34a}}.fail,.error{{border-color:#dc2626;color:#991b1b}}.error{{background:#fee2e2;padding:1rem;border-radius:8px}}small{{color:#475569}}</style></head>
-    <body><main><header><h1>Columnas de concreto armado · ACI 318-19</h1><p>Calculadora serverless: flexocompresión biaxial por Bresler y cortante.</p></header>
-    <form method=\"get\"><h2>Datos de entrada</h2><div class=\"fields\">{fields}</div><label>Armado (0 = vacío; filas con ; y columnas con ,)<textarea name=\"armado\">{escape(armed)}</textarea></label><button type=\"submit\">Calcular</button><p><small>Unidades: B, H, r y s en cm; f'c/fy en kgf/cm²; Pu/Vu en tonf; Mux/Muy en tonf·m. Para diagramas P-M y editor gráfico completo, ejecute esta misma aplicación en Streamlit Cloud.</small></p></form>{results}</main></body></html>"""
+    <body><main><header><h1>Columnas de concreto armado · ACI 318-19</h1><p>Calculadora serverless: flexocompresión biaxial ACI y cortante.</p></header>
+    <form method=\"get\"><h2>Datos de entrada</h2><div class=\"fields\">{fields}</div><label>Armado (0 = vacío; filas con ; y columnas con ,)<textarea name=\"armado\">{escape(armed)}</textarea></label><button type=\"submit\">Calcular</button><p><small>Unidades: B, H, r en cm; f'c/fy en kgf/cm²; Pu/Vu en tonf; Mux/Muy en tonf·m. Para diagramas P-M y editor gráfico completo, ejecute esta misma aplicación en Streamlit Cloud.</small></p></form>{results}</main></body></html>"""
 
 
 def app(environ, start_response):
@@ -450,16 +594,14 @@ def build_sidebar():
         mux = st.number_input("Mux", value=25.0, step=1.0)
         muy = st.number_input("Muy", value=15.0, step=1.0)
         vu = st.number_input("Vu", min_value=0.0, value=35.0, step=1.0)
-        s = st.number_input("Separación de estribos s", min_value=1.0, value=15.0, step=1.0)
-        return b, h, rec, tie, fc, fy, matrix, pu, mux, muy, vu, s
+        return b, h, rec, tie, fc, fy, matrix, pu, mux, muy, vu
 
 
 def main() -> None:
     st.set_page_config(page_title="Columnas ACI 318-19", page_icon="🏗️", layout="wide")
     st.title("Columnas de concreto armado · ACI 318-19")
     st.caption("Análisis por compatibilidad de deformaciones, flexocompresión uniaxial/biaxial y cortante.")
-    values = build_sidebar()
-    b, h, rec, tie, fc, fy, matrix, pu, mux, muy, vu, s = values
+    b, h, rec, tie, fc, fy, matrix, pu, mux, muy, vu = build_sidebar()
     try:
         raw_matrix = matrix.fillna(0).astype(int).to_numpy()
         section = DiagramaInteraccion(b * cm, h * cm, rec * cm, tie,
@@ -468,12 +610,17 @@ def main() -> None:
             raise CuantiaError(f"Cuantía {section.rho:.2%}: excede el máximo de 8%.")
         if section.rho < 0.01:
             st.warning(f"Cuantía longitudinal {section.rho:.2%}: menor al mínimo de referencia de 1% ACI.")
+        det = section.verificar_detallado()
+        if not det.cumple:
+            for msg in det.mensajes:
+                st.error(msg)
+            st.stop()
     except (ValueError, TypeError, GeometriaError, CuantiaError) as error:
         st.error(f"Datos no válidos: {error}")
         st.stop()
 
-    pu_i, mux_i, muy_i, vu_i, s_i = pu * ton, mux * ton * m, muy * ton * m, vu * ton, s * cm
-    tabs = st.tabs(["Diagramas 2D", "Biaxial · Bresler", "Cortante", "Geometría y resumen"])
+    pu_i, mux_i, muy_i, vu_i = pu * ton, mux * ton * m, muy * ton * m, vu * ton
+    tabs = st.tabs(["Diagramas 2D", "Biaxial ACI", "Cortante", "Geometría y resumen"])
     with tabs[0]:
         col1, col2 = st.columns(2)
         with col1:
@@ -483,35 +630,41 @@ def main() -> None:
         st.caption("La línea naranja corresponde a φ·0.80·P₀. Las curvas se trazan para ambas caras comprimidas.")
     with tabs[1]:
         try:
-            biaxial = section.verificar_biaxial(pu_i, mux_i, muy_i)
-            cols = st.columns(5)
-            for col, label, key in zip(cols, ["φPnx", "φPny", "φP0", "φP admisible", "D/C"],
-                                       ["pnx", "pny", "p0", "padm", "ratio"]):
-                col.metric(label, f"{biaxial[key] / ton:,.2f} tonf" if key != "ratio" else f"{biaxial[key]:.3f}")
-            if biaxial["cumple"]:
-                st.success("CUMPLE — Pu no supera la capacidad biaxial por carga recíproca de Bresler.")
-            else:
-                st.error("FALLA — Pu supera la capacidad biaxial por carga recíproca de Bresler.")
-            st.caption(f"Excentricidades usadas: eₓ = {biaxial['ex'] / cm:.2f} cm; eᵧ = {biaxial['ey'] / cm:.2f} cm.")
-        except BreslerError as error:
-            st.error(f"No fue posible comprobar Bresler: {error}")
+            biaxial = section.verificar_biaxial_aci(pu_i, mux_i, muy_i)
+            col1, col2 = st.columns([3, 2])
+            with col1:
+                fig = plot_contorno_aci(biaxial, mux_i, muy_i)
+                st.pyplot(fig, use_container_width=True)
+            with col2:
+                st.subheader("Verificación biaxial ACI 318-19")
+                st.metric("φMnx (uniaxial en Pu)", f"{biaxial['mx_uniaxial'] / ton:,.3f} tonf·m")
+                st.metric("φMny (uniaxial en Pu)", f"{biaxial['my_uniaxial'] / ton:,.3f} tonf·m")
+                st.metric("Relación D/C (radial)", f"{biaxial['ratio']:.3f}")
+                if biaxial["cumple"]:
+                    st.success("CUMPLE — La demanda está dentro del contorno ACI.")
+                else:
+                    st.error("FALLA — La demanda excede el contorno ACI.")
+                st.caption("Método de contorno de carga ACI 318-19 por compatibilidad de deformaciones.")
+        except BiaxialError as error:
+            st.error(f"No fue posible calcular el contorno biaxial: {error}")
     with tabs[2]:
         try:
-            shear = section.verificar_cortante(pu_i, vu_i, s_i)
+            shear = section.verificar_cortante(pu_i, vu_i)
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("Vc", fmt_force(shear.vc))
-            c2.metric("Vs", fmt_force(shear.vs))
+            c2.metric("Vs requerido", fmt_force(shear.vs_requerido))
             c3.metric("φVn", fmt_force(shear.phi_vn))
             c4.metric("Vu", fmt_force(vu_i))
-            if vu_i <= shear.phi_vn:
+            if shear.phi_vn >= vu_i:
                 st.success("CUMPLE — Vu ≤ φVn.")
             else:
                 st.error("FALLA — Vu > φVn.")
-            if shear.s_requerido is None:
-                st.info("El concreto aporta la resistencia requerida; el espaciamiento queda sujeto a los máximos normativos de detallado.")
+            if shear.s_maximo is None:
+                st.info("El concreto solo aporta la resistencia requerida; el espaciamiento queda sujeto a los máximos normativos de detallado ACI.")
             else:
-                st.write(f"Separación máxima por resistencia: **{shear.s_requerido / cm:.2f} cm** (verificar además límites de espaciamiento ACI).")
-            st.caption("Se emplea d en la dirección H y Av = dos ramas del estribo. Verifique requisitos de confinamiento y cortante sísmico aplicables.")
+                st.write(f"Separación máxima requerida por resistencia: **{shear.s_maximo / cm:.2f} cm**")
+                st.caption("Verificar además los límites de espaciamiento ACI: mínimo 10 cm, máximo 48×øₑ, 16×øₗ o la menor dimensión de la sección.")
+            st.caption("Se emplea d en la dirección H, Av = dos ramas del estribo. Factor de reducción φ = 0.75.")
         except (ValueError, GeometriaError) as error:
             st.error(f"No fue posible comprobar el cortante: {error}")
     with tabs[3]:
