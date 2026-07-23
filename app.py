@@ -7,7 +7,11 @@ from io import BytesIO
 from base64 import b64encode
 from html import escape
 from urllib.parse import parse_qs
+from string import Template
 import warnings
+import os
+
+import verification
 
 m = 1.0
 cm = 0.01 * m
@@ -271,7 +275,7 @@ class DiagramaInteraccion:
 
 def plot_diagram(section, eje, pu, mu):
     pn, mn, pp, mp, pmax = section.curva_interaccion(eje)
-    fig, ax = plt.subplots(figsize=(7, 5))
+    fig, ax = plt.subplots(figsize=(8, 6))
     mn_neg = [-x for x in mn]
     mp_neg = [-x for x in mp]
     ax.plot([x / ton for x in mn], [x / ton for x in pn], 'k--', lw=1.5, label='Nominal')
@@ -281,7 +285,7 @@ def plot_diagram(section, eje, pu, mu):
     ax.axhline(0.65 * pmax / ton, color='orange', lw=1.3, label='\u03c6Pn,max')
     ax.axhline(0, color='black', lw=0.7)
     ax.axvline(0, color='black', lw=0.7)
-    ax.scatter([mu / ton], [pu / ton], color='red', s=50, zorder=5, label='Demanda')
+    ax.scatter([mu / ton], [pu / ton], color='red', s=56, zorder=5, label='Demanda')
     ax.grid(color='silver', linestyle='--', linewidth=0.5)
     title = 'Mx' if eje == 'x' else 'My'
     ax.set(xlabel=f'{title} (tonf\u00b7m)', ylabel='P (tonf)', title=f'Diagrama P\u2013{title}')
@@ -294,10 +298,10 @@ def plot_diagram(section, eje, pu, mu):
 
 def plot_contorno_aci(contour, mux, muy):
     closed = np.vstack((contour, contour[:1]))
-    fig, ax = plt.subplots(figsize=(6.5, 5.5))
+    fig, ax = plt.subplots(figsize=(7, 6))
     ax.fill(closed[:, 0] / ton, closed[:, 1] / ton, color='#bae6fd', alpha=0.55, label='Region resistente')
     ax.plot(closed[:, 0] / ton, closed[:, 1] / ton, color='#0284c7', lw=2, label='Contorno ACI \u03c6P = Pu')
-    ax.scatter([mux / ton], [muy / ton], color='red', s=48, zorder=5, label='Demanda')
+    ax.scatter([mux / ton], [muy / ton], color='red', s=52, zorder=5, label='Demanda')
     ax.axhline(0, color='black', lw=0.7)
     ax.axvline(0, color='black', lw=0.7)
     ax.set_aspect('equal', adjustable='box')
@@ -311,14 +315,14 @@ def plot_contorno_aci(contour, mux, muy):
 
 
 def plot_section(section):
-    fig, ax = plt.subplots(figsize=(8, 6))
+    fig, ax = plt.subplots(figsize=(10, 8))
     ax.add_patch(plt.Rectangle((0, 0), section.b / cm, section.h / cm,
                                 fill=False, lw=3, color='#1e293b'))
     for x, y, area, dm, d in section._bars:
         r = d / (2 * cm)
         ax.add_patch(plt.Circle((x / cm, y / cm), r, color='#b91c1c', alpha=0.85))
         ax.text(x / cm, y / cm, f'{dm:.1f}', color='white',
-                ha='center', va='center', fontsize=8, fontweight='bold')
+                ha='center', va='center', fontsize=9, fontweight='bold')
     ax.set_aspect('equal')
     ax.invert_yaxis()
     ax.set(xlabel='B (cm)', ylabel='H (cm)', title='Distribucion de acero longitudinal (diametros en mm)')
@@ -336,11 +340,86 @@ def fig_to_b64(fig):
     return b64encode(buf.getvalue()).decode('ascii')
 
 
+def generar_matriz_barras(n_B, n_H, diam_long, diam_corner):
+    mat = np.full((n_H, n_B), diam_long)
+    if n_B >= 1 and n_H >= 1:
+        mat[0, 0] = diam_corner
+    if n_B >= 2:
+        mat[0, -1] = diam_corner
+    if n_H >= 2:
+        mat[-1, 0] = diam_corner
+    if n_B >= 2 and n_H >= 2:
+        mat[-1, -1] = diam_corner
+    return mat
+
+
+def matriz_to_html(mat):
+    rows, cols = mat.shape
+    html = '<table class="matrix">'
+    for i in range(rows):
+        html += '<tr>'
+        for j in range(cols):
+            val = float(mat[i, j])
+            cls = 'corner' if val > 0 and (
+                (i == 0 and j == 0) or
+                (i == 0 and j == cols - 1) or
+                (i == rows - 1 and j == 0) or
+                (i == rows - 1 and j == cols - 1)
+            ) else ''
+            html += f'<td class="{cls}">{val:.1f}</td>'
+        html += '</tr>'
+    html += '</table>'
+    return html
+
+
 def _parse_matrix(raw):
     rows = [[float(x.strip()) for x in row.split(',')] for row in raw.split(';') if row.strip()]
     if not rows or any(len(r) != len(rows[0]) for r in rows):
         raise ValueError("Matriz invalida: use filas separadas por ; y columnas por ,")
     return np.array(rows, dtype=float)
+
+
+def _verif_to_html(vr):
+    geo = vr["geometria"]
+    la = vr["acero_longitudinal"]
+    cm_check = vr["cuantia_minima"]
+    at = vr["acero_transversal"]
+    ram = vr["ramales"]
+    se = vr["separacion_estribos"]
+
+    html = '''
+<div class="card">
+<h2>Verificación ACI 318-19</h2>
+<div class="summary-grid">
+<div class="summary-item"><div class="label">Ag</div><div class="value">{ag:.2f} cm²</div></div>
+<div class="summary-item"><div class="label">bc</div><div class="value">{bc:.2f} cm</div></div>
+<div class="summary-item"><div class="label">Ac</div><div class="value">{ac:.2f} cm²</div></div>
+<div class="summary-item"><div class="label">N° varillas</div><div class="value">{n_total}</div></div>
+<div class="summary-item"><div class="label">As total</div><div class="value">{as_col:.2f} cm²</div></div>
+<div class="summary-item"><div class="label">ρ</div><div class="value">{pcol:.2%}</div><div class="status {cm_cls}">{cm_txt}</div></div>
+<div class="summary-item"><div class="label">Ash req.</div><div class="value">{ash:.2f} cm²</div></div>
+<div class="summary-item"><div class="label">Ramales</div><div class="value">{n_ram}</div></div>
+<div class="summary-item"><div class="label">Lo</div><div class="value">{lo:.1f} cm</div></div>
+</div>
+<h3>Separación de estribos</h3>
+<p>Dentro de Lo: s &lt; {sdentro:.2f} cm &nbsp;|&nbsp; Fuera de Lo: s &lt; {sfuera:.2f} cm</p>
+<h3>Separación acero longitudinal</h3>
+<p>Dirección B: {sepB:.2f} cm &nbsp;|&nbsp; Dirección H: {sepH:.2f} cm</p>
+</div>'''.format(
+        ag=geo["Ag_real"], bc=geo["bc"], ac=geo["Ac"],
+        n_total=la["n_total"], as_col=la["As_col"],
+        pcol=cm_check["p_col"],
+        cm_cls="ok" if cm_check["cumple"] else "fail",
+        cm_txt="CUMPLE ρ≥1%" if cm_check["cumple"] else "NO CUMPLE ρ<1%",
+        ash=at["Ash"], n_ram=ram["n_usar"],
+        lo=vr["Lo"],
+        sdentro=se["dentro_Lo"], sfuera=se["fuera_Lo"],
+        sepB=vr["separacion_long_B"], sepH=vr["separacion_long_H"]
+    )
+    return html
+
+
+TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), 'templates', 'report.html')
 
 
 def app(environ, start_response):
@@ -349,6 +428,7 @@ def app(environ, start_response):
         body = b'{"status":"ok"}'
         start_response('200 OK', [('Content-Type', 'application/json; charset=utf-8')])
         return [body]
+
     html = ''
     try:
         b = float(qs.get('b', ['40'])[0])
@@ -360,9 +440,19 @@ def app(environ, start_response):
         pu = float(qs.get('pu', ['300'])[0])
         mux = float(qs.get('mux', ['25'])[0])
         muy = float(qs.get('muy', ['15'])[0])
-        raw_mat = qs.get('armado', ['25.4,25.4,25.4,25.4;25.4,0,0,25.4;25.4,0,0,25.4;25.4,25.4,25.4,25.4'])[0]
+        n_B = int(qs.get('n_B', ['4'])[0])
+        n_H = int(qs.get('n_H', ['4'])[0])
+        diam_long = float(qs.get('diam_long', ['22'])[0])
+        diam_corner = float(qs.get('diam_corner', ['25'])[0])
+        L = float(qs.get('L', ['300'])[0])
+        s_estribo = float(qs.get('s_estribo', ['10'])[0])
 
-        mat = _parse_matrix(raw_mat)
+        raw_mat = qs.get('armado', [None])[0]
+        if raw_mat:
+            mat = _parse_matrix(raw_mat)
+        else:
+            mat = generar_matriz_barras(n_B, n_H, diam_long, diam_corner)
+
         sec = DiagramaInteraccion(b * cm, h * cm, rec * cm, tie_mm * mm,
                                   fc * kgf / (cm**2), fy * kgf / (cm**2), mat)
 
@@ -374,9 +464,9 @@ def app(environ, start_response):
         fig1 = plot_diagram(sec, 'x', pu * ton, mux * ton * m)
         fig2 = plot_diagram(sec, 'y', pu * ton, muy * ton * m)
         fig3 = plot_section(sec)
-        img1 = fig_to_b64(fig1)
-        img2 = fig_to_b64(fig2)
-        img3 = fig_to_b64(fig3)
+        img_x = fig_to_b64(fig1)
+        img_y = fig_to_b64(fig2)
+        img_sec = fig_to_b64(fig3)
 
         biaxial_html = ''
         if abs(muy) > 0.01 and not esp_msgs:
@@ -390,80 +480,60 @@ def app(environ, start_response):
                 cap_radial = np.hypot(mx_uni, my_uni)
                 ratio = radial / cap_radial if cap_radial > 0 else 999
                 status = 'CUMPLE' if ratio <= 1 else 'FALLA'
+                status_cls = 'ok' if ratio <= 1 else 'fail'
                 biaxial_html = f'''
-                <h2>Verificacion biaxial ACI</h2>
-                <div class="grid">
-                <div><img src="data:image/png;base64,{img4}" style="max-width:100%"></div>
+                <div class="card">
+                <h2>Verificación biaxial ACI</h2>
+                <div class="grid-2">
+                <div><img src="data:image/png;base64,{img4}" style="width:100%"></div>
                 <div>
-                <p><b>\u03c6Mnx:</b> {mx_uni:,.3f} tonf\u00b7m</p>
-                <p><b>\u03c6Mny:</b> {my_uni:,.3f} tonf\u00b7m</p>
-                <p><b>D/C:</b> {ratio:.3f} <b>{status}</b></p>
-                </div></div>
+                <div class="summary-grid">
+                <div class="summary-item"><div class="label">ϕMnx</div><div class="value">{mx_uni:,.3f} tonf·m</div></div>
+                <div class="summary-item"><div class="label">ϕMny</div><div class="value">{my_uni:,.3f} tonf·m</div></div>
+                <div class="summary-item"><div class="label">D/C radial</div><div class="value">{ratio:.3f}</div><div class="status {status_cls}">{status}</div></div>
+                </div></div></div></div>
                 '''
             except Exception as e:
-                biaxial_html = f'<p class="error">Biaxial: {escape(str(e))}</p>'
+                biaxial_html = f'<div class="error">Biaxial: {escape(str(e))}</div>'
 
-        ag = sec.ag() / cm**2
-        ast = sec.ast() / cm**2
-        rho = sec.rho()
-        p0 = sec.p0() / ton
-        pnmax = sec.pn_max() / ton
-        phipmax = 0.65 * sec.pn_max() / ton
+        ag_val = sec.ag() / cm**2
+        ast_val = sec.ast() / cm**2
+        rho_val = sec.rho()
+        p0_val = sec.p0() / ton
+        pnmax_val = sec.pn_max() / ton
+        phipmax_val = 0.65 * sec.pn_max() / ton
 
-        html = f'''<!doctype html>
-<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Columnas ACI 318-19</title>
-<style>
-body{{font-family:sans-serif;background:#f1f5f9;color:#0f172a;margin:0;padding:1rem}}
-header{{background:#172554;color:#fff;padding:1rem;border-radius:10px;margin-bottom:1rem}}
-.grid{{display:grid;grid-template-columns:1fr 1fr;gap:1rem}}
-.card{{background:#fff;padding:1rem;border-radius:10px;box-shadow:0 1px 4px #00000020}}
-img{{max-width:100%;height:auto}}
-table{{width:100%;border-collapse:collapse}}
-td,th{{padding:.4rem;border:1px solid #cbd5e1;text-align:left}}
-.ok{{color:#16a34a;font-weight:bold}}
-.fail{{color:#dc2626;font-weight:bold}}
-.error{{color:#dc2626;background:#fee2e2;padding:.5rem;border-radius:6px}}
-form{{display:flex;flex-wrap:wrap;gap:.5rem;align-items:end;margin-bottom:1rem}}
-form label{{font-size:.85rem}}
-form input{{padding:.4rem;border:1px solid #94a3b8;border-radius:5px;width:90px}}
-form textarea{{padding:.4rem;border:1px solid #94a3b8;border-radius:5px}}
-form button{{background:#0284c7;color:#fff;border:0;padding:.5rem 1rem;border-radius:5px;cursor:pointer}}
-</style></head>
-<body>
-<header><h1>Columnas de concreto armado \u00b7 ACI 318-19</h1></header>
-<form method="get">
-<label>B (cm) <input name="b" value="{b}"></label>
-<label>H (cm) <input name="h" value="{h}"></label>
-<label>r (cm) <input name="rec" value="{rec}"></label>
-<label>Estribo (mm) <input name="tie" value="{tie_mm}"></label>
-<label>f\'c (kgf/cm\u00b2) <input name="fc" value="{fc}"></label>
-<label>fy (kgf/cm\u00b2) <input name="fy" value="{fy}"></label>
-<label>Pu (tonf) <input name="pu" value="{pu}"></label>
-<label>Mux (tonf\u00b7m) <input name="mux" value="{mux}"></label>
-<label>Muy (tonf\u00b7m) <input name="muy" value="{muy}"></label>
-<label>Armado (mm; filas con ;, columnas con ,)<br><textarea name="armado" rows="4" style="width:260px">{escape(raw_mat)}</textarea></label>
-<button style="padding:.6rem 2rem;font-size:1.1rem">CALCULAR</button>
-</form>
-{esp_html}
-<div class="grid">
-<div class="card"><img src="data:image/png;base64,{img1}" style="width:100%"></div>
-<div class="card"><img src="data:image/png;base64,{img2}" style="width:100%"></div>
-</div>
-{biaxial_html}
-<div class="grid">
-<div class="card"><img src="data:image/png;base64,{img3}" style="width:100%"></div>
-<div class="card"><h2>Propiedades de la seccion</h2>
-<table><tr><th>Propiedad</th><th>Valor</th><th>Que es</th></tr>
-<tr><td>Ag</td><td>{ag:.2f} cm\u00b2</td><td>Area bruta de concreto</td></tr>
-<tr><td>Ast</td><td>{ast:.2f} cm\u00b2</td><td>Area total de acero longitudinal</td></tr>
-<tr><td>\u03c1</td><td>{rho:.3%}</td><td>Cuantia = Ast/Ag</td></tr>
-<tr><td>P0 nominal</td><td>{p0:,.2f} tonf</td><td>Capacidad en compresion pura</td></tr>
-<tr><td>Pn,max nominal</td><td>{pnmax:,.2f} tonf</td><td>Max. nominal = 0.80\u00b7P0</td></tr>
-<tr><td>\u03c6Pn,max</td><td>{phipmax:,.2f} tonf</td><td>Capacidad de dise\u00f1o = 0.65\u00b7Pn,max</td></tr>
-</table>
-</div></div>
-</body></html>'''
+        matrix_html = matriz_to_html(mat)
+
+        vr = verification.verificar_columna(
+            B=b, H=h, rec=rec,
+            n_var_B=n_B, n_var_H=n_H,
+            phi_long_mm=diam_long, phi_esq_mm=diam_corner,
+            phi_estribo_mm=tie_mm,
+            fc=fc, fy=fy,
+            L=L, s_estribo=s_estribo
+        )
+        verificacion_html = _verif_to_html(vr)
+
+        with open(TEMPLATE_PATH, 'r', encoding='utf-8') as f:
+            tmpl = Template(f.read())
+
+        html = tmpl.substitute(
+            b_cm=b, h_cm=h, rec_cm=rec, tie_mm=tie_mm,
+            fc_val=fc, fy_val=fy,
+            n_B=n_B, n_H=n_H, diam_long=diam_long, diam_corner=diam_corner,
+            L_val=L, s_estribo=s_estribo,
+            pu_val=pu, mux_val=mux, muy_val=muy,
+            espaciado_html=esp_html,
+            img_x=img_x, img_y=img_y, img_sec=img_sec,
+            ag_val=f'{ag_val:.2f}', ast_val=f'{ast_val:.2f}',
+            rho_val=f'{rho_val:.3%}',
+            p0_val=f'{p0_val:,.2f}', pnmax_val=f'{pnmax_val:,.2f}',
+            phipmax_val=f'{phipmax_val:,.2f}',
+            biaxial_html=biaxial_html,
+            verificacion_html=verificacion_html,
+            matrix_html=matrix_html,
+        )
     except Exception as e:
         html = f'<p class="error">Error: {escape(str(e))}</p>'
     body = html.encode('utf-8')
@@ -475,6 +545,76 @@ if __name__ == "__main__":
     import streamlit as st
 
     st.set_page_config(page_title='Columnas ACI 318-19', page_icon='\U0001f3d7\ufe0f', layout='wide')
+
+    st.markdown("""
+    <style>
+    div[data-testid="column"]:nth-of-type(2) .stButton button {
+        font-size: 1.4rem !important;
+        padding: 0.75rem 2rem !important;
+        font-weight: 700 !important;
+        border-radius: 10px !important;
+        box-shadow: 0 4px 14px rgba(2,132,199,0.35) !important;
+        border: 2px solid #0284c7 !important;
+        transition: all 0.2s ease !important;
+    }
+    div[data-testid="column"]:nth-of-type(2) .stButton button:hover {
+        box-shadow: 0 6px 20px rgba(2,132,199,0.5) !important;
+        transform: scale(1.02) !important;
+    }
+    .verif-card {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 0.8rem 1rem;
+        text-align: center;
+    }
+    .verif-card .label {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        color: #64748b;
+        letter-spacing: 0.03em;
+    }
+    .verif-card .value {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #0f172a;
+        margin-top: 0.1rem;
+    }
+    .verif-card .status-pass {
+        color: #16a34a;
+        font-weight: 700;
+        font-size: 0.85rem;
+    }
+    .verif-card .status-fail {
+        color: #dc2626;
+        font-weight: 700;
+        font-size: 0.85rem;
+    }
+    .matrix-table {
+        border-collapse: collapse;
+        margin: 0 auto;
+        font-size: 0.9rem;
+    }
+    .matrix-table td {
+        width: 2.8rem;
+        height: 2.8rem;
+        text-align: center;
+        border: 1px solid #94a3b8;
+        font-weight: 600;
+    }
+    .matrix-table td.corner {
+        background: #dbeafe;
+        color: #1e40af;
+    }
+    .matrix-table td.interior {
+        background: #fefce8;
+    }
+    .st-emotion-cache-1r4qj8v {
+        font-size: 1rem;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     st.title('Columnas de concreto armado \u00b7 ACI 318-19')
 
     if "calcular" not in st.session_state:
@@ -487,28 +627,23 @@ if __name__ == "__main__":
         h = st.number_input('H (cm)', min_value=10.0, value=40.0, step=1.0)
         rec = st.number_input('Rec. r (cm)', min_value=1.0, value=4.0, step=0.5)
         tie_mm = st.number_input('Estribo (mm)', min_value=4.0, max_value=25.0, value=9.5, step=0.5,
-                                 help='Diametro del estribo. Referencia: #3=9.5mm, #4=12.7mm, #5=15.9mm')
+                                 help='Diametro del estribo. #3=9.5mm, #4=12.7mm, #5=15.9mm')
+        L = st.number_input('L (cm) - Longitud libre columna', min_value=100.0, value=300.0, step=10.0)
+        s_estribo = st.number_input('s (cm) - Separacion estribos propuesta', min_value=1.0, value=10.0, step=0.5)
 
         st.subheader('Materiales')
         fc = st.number_input("f'c (kgf/cm\u00b2)", min_value=100.0, value=280.0, step=10.0)
         fy = st.number_input('fy (kgf/cm\u00b2)', min_value=2000.0, value=4200.0, step=100.0)
 
         st.subheader('Armado longitudinal')
-        st.caption('Ingrese el diametro en mm. Use 0 para celdas sin barra.')
-        st.caption('Ej: 25.4 = barra #8, 12.7 = barra #4.')
-        default_mat = pd.DataFrame(
-            [[25.4, 25.4, 25.4, 25.4],
-             [25.4, 0, 0, 25.4],
-             [25.4, 0, 0, 25.4],
-             [25.4, 25.4, 25.4, 25.4]],
-            columns=['C1', 'C2', 'C3', 'C4']
-        )
-        matrix = st.data_editor(
-            default_mat, num_rows='dynamic', height=320, use_container_width=True,
-            key='armado',
-            column_config={c: st.column_config.NumberColumn(c, min_value=0, step=1, format="%.1f")
-                           for c in ['C1', 'C2', 'C3', 'C4']}
-        )
+        st.caption('Las esquinas usan el diametro de esquina; el resto usa el diametro longitudinal.')
+        col_a, col_b = st.columns(2)
+        with col_a:
+            n_B = st.number_input('N\u00b0 varillas en B', min_value=2, max_value=12, value=4, step=1)
+        with col_b:
+            n_H = st.number_input('N\u00b0 varillas en H', min_value=2, max_value=12, value=4, step=1)
+        diam_long = st.number_input('\u00d8 acero longitudinal (mm)', min_value=6.0, max_value=50.0, value=22.0, step=1.0)
+        diam_corner = st.number_input('\u00d8 acero esquinas (mm)', min_value=6.0, max_value=50.0, value=25.0, step=1.0)
 
         st.subheader('Demandas')
         pu = st.number_input('Pu (tonf)', min_value=0.0, value=300.0, step=5.0)
@@ -523,7 +658,8 @@ if __name__ == "__main__":
 
     if st.session_state.calcular:
         try:
-            raw_matrix = matrix.fillna(0).astype(float).to_numpy()
+            raw_matrix = generar_matriz_barras(n_B, n_H, diam_long, diam_corner)
+
             section = DiagramaInteraccion(
                 b * cm, h * cm, rec * cm, tie_mm * mm,
                 fc * kgf / (cm**2), fy * kgf / (cm**2), raw_matrix
@@ -550,77 +686,150 @@ if __name__ == "__main__":
         mux_i = mux * ton * m
         muy_i = muy * ton * m
 
-        st.subheader('Diagramas de interaccion P\u2013M')
-        st.caption(
-            'Curva nominal (negro discontinuo) y reducida por \u03c6 (azul). '
-            'Linea naranja = \u03c6Pn,max (limite ACI 318-19). '
-            'Punto rojo = demanda (Pu, Mu).'
-        )
-        col1, col2 = st.columns(2)
-        with col1:
-            st.pyplot(plot_diagram(section, 'x', pu_i, mux_i), use_container_width=True)
-        with col2:
-            st.pyplot(plot_diagram(section, 'y', pu_i, muy_i), use_container_width=True)
+        # --- Expander 1: Geometria y Propiedades ---
+        with st.expander('Geometr\u00eda y Propiedades de la secci\u00f3n', expanded=True):
+            col1, col2 = st.columns([3, 2])
+            with col1:
+                st.pyplot(plot_section(section), use_container_width=True)
+            with col2:
+                desc = [
+                    'Area bruta de concreto',
+                    'Area total de acero longitudinal',
+                    'Cuantia de refuerzo = Ast/Ag',
+                    'Capacidad en compresion pura (sin excentricidad)',
+                    'Maximo nominal admisible = 0.80 x P0',
+                    'Capacidad de diseno = 0.65 x Pn,max',
+                ]
+                data = {
+                    'Propiedad': ['Ag', 'Ast', '\u03c1', 'P0 nominal', 'Pn,max nominal', '\u03c6Pn,max'],
+                    'Valor': [
+                        f'{section.ag() / cm**2:.2f} cm\u00b2',
+                        f'{section.ast() / cm**2:.2f} cm\u00b2',
+                        f'{section.rho():.3%}',
+                        f'{section.p0() / ton:,.2f} tonf',
+                        f'{section.pn_max() / ton:,.2f} tonf',
+                        f'{0.65 * section.pn_max() / ton:,.2f} tonf',
+                    ],
+                    'Descripcion': desc,
+                }
+                st.table(pd.DataFrame(data))
 
-        if abs(muy) > 0.01:
-            st.subheader('Verificacion biaxial ACI 318-19')
+                st.markdown('**Matriz de barras (mm)**')
+                df_mat = pd.DataFrame(raw_matrix,
+                                      columns=[f'C{j+1}' for j in range(raw_matrix.shape[1])])
+                st.dataframe(df_mat, use_container_width=True, hide_index=True)
+
+        # --- Expander 2: Diagramas P-M ---
+        with st.expander('Diagramas de interacci\u00f3n P\u2013M', expanded=True):
             st.caption(
-                'Cuando hay momentos en ambos ejes, los diagramas P\u2013Mx y P\u2013My '
-                'no son suficientes. El contorno biaxial verifica la interaccion '
-                'combinada (Mx, My) a carga axial Pu.'
+                'Curva nominal (negro discontinuo) y reducida por \u03c6 (azul). '
+                'Linea naranja = \u03c6Pn,max (limite ACI 318-19). '
+                'Punto rojo = demanda (Pu, Mu).'
             )
-            try:
-                contour = section.contorno_aci(pu_i)
-                col1, col2 = st.columns([3, 2])
-                with col1:
-                    st.pyplot(plot_contorno_aci(contour, mux_i, muy_i), use_container_width=True)
-                with col2:
-                    mx_uni = float(np.max(np.abs(contour[:, 0]))) if len(contour) else 0
-                    my_uni = float(np.max(np.abs(contour[:, 1]))) if len(contour) else 0
-                    st.metric('\u03c6Mnx (uniaxial en Pu)', f'{mx_uni / ton:,.3f} tonf\u00b7m')
-                    st.metric('\u03c6Mny (uniaxial en Pu)', f'{my_uni / ton:,.3f} tonf\u00b7m')
-                    radial = np.hypot(mux_i, muy_i)
-                    cap_radial = np.hypot(mx_uni, my_uni)
-                    ratio = radial / cap_radial if cap_radial > 0 else 999
-                    st.metric('D/C radial', f'{ratio:.3f}')
-                    if ratio <= 1:
-                        st.success('CUMPLE \u2014 La demanda esta dentro del contorno ACI.')
-                    else:
-                        st.error('FALLA \u2014 La demanda excede el contorno ACI.')
-                    st.caption('D/C = distancia demanda / distancia contorno en misma direccion.')
-            except Exception as e:
-                st.error(f'Biaxial: {e}')
+            col1, col2 = st.columns(2)
+            with col1:
+                st.pyplot(plot_diagram(section, 'x', pu_i, mux_i), use_container_width=True)
+            with col2:
+                st.pyplot(plot_diagram(section, 'y', pu_i, muy_i), use_container_width=True)
 
-        st.subheader('Geometria de la seccion')
-        col1, col2 = st.columns([3, 2])
-        with col1:
-            st.pyplot(plot_section(section), use_container_width=True)
-        with col2:
-            desc = [
-                'Area bruta de concreto',
-                'Area total de acero longitudinal',
-                'Cuantia de refuerzo = Ast/Ag',
-                'Capacidad en compresion pura (sin excentricidad)',
-                'Maximo nominal admisible = 0.80 x P0',
-                'Capacidad de diseno = 0.65 x Pn,max',
-            ]
-            data = {
-                'Propiedad': ['Ag', 'Ast', '\u03c1', 'P0 nominal', 'Pn,max nominal', '\u03c6Pn,max'],
-                'Valor': [
-                    f'{section.ag() / cm**2:.2f} cm\u00b2',
-                    f'{section.ast() / cm**2:.2f} cm\u00b2',
-                    f'{section.rho():.3%}',
-                    f'{section.p0() / ton:,.2f} tonf',
-                    f'{section.pn_max() / ton:,.2f} tonf',
-                    f'{0.65 * section.pn_max() / ton:,.2f} tonf',
-                ],
-                'Descripcion': desc,
-            }
-            st.table(pd.DataFrame(data))
-            st.subheader('Matriz de barras (mm)')
-            st.dataframe(pd.DataFrame(raw_matrix), use_container_width=True, hide_index=True)
+        # --- Expander 3: Verificacion ACI 318-19 ---
+        with st.expander('Verificaci\u00f3n ACI 318-19', expanded=True):
+            vr = verification.verificar_columna(
+                B=b, H=h, rec=rec,
+                n_var_B=n_B, n_var_H=n_H,
+                phi_long_mm=diam_long, phi_esq_mm=diam_corner,
+                phi_estribo_mm=tie_mm,
+                fc=fc, fy=fy,
+                L=L, s_estribo=s_estribo
+            )
+            geo = vr["geometria"]
+            la = vr["acero_longitudinal"]
+            cm_check = vr["cuantia_minima"]
+            at = vr["acero_transversal"]
+            ram = vr["ramales"]
+            se = vr["separacion_estribos"]
 
-        with st.expander('Supuestos tecnicos del calculo'):
+            st.markdown('**1. Geometr\u00eda de la columna**')
+            c1, c2, c3 = st.columns(3)
+            c1.metric('Ag (area bruta)', f'{geo["Ag_real"]:.2f} cm\u00b2')
+            c2.metric('bc (ancho confinado)', f'{geo["bc"]:.2f} cm')
+            c3.metric('Ac (area confinada)', f'{geo["Ac"]:.2f} cm\u00b2')
+
+            st.markdown('**2. Acero longitudinal**')
+            c1, c2 = st.columns(2)
+            c1.metric('N\u00b0 total de varillas', str(la["n_total"]))
+            c2.metric('As total', f'{la["As_col"]:.2f} cm\u00b2')
+
+            st.markdown('**3. Cuant\u00eda m\u00ednima**')
+            c1, c2, c3 = st.columns(3)
+            c1.metric('\u03c1 (Ast/Ag)', f'{cm_check["p_col"]:.3%}')
+            if cm_check["cumple"]:
+                c2.success('CUMPLE \u03c1 \u2265 1%')
+            else:
+                c2.error(f'NO CUMPLE (min {cm_check["As_min"]:.2f} cm\u00b2)')
+            c3.metric('Estado', 'OK' if cm_check["cumple"] else 'Aumentar As')
+
+            st.markdown('**4. Acero transversal (estribos) \u2014 Ash**')
+            c1, c2, c3 = st.columns(3)
+            c1.metric('Ash1', f'{at["Ash1"]:.3f} cm\u00b2')
+            c2.metric('Ash2', f'{at["Ash2"]:.3f} cm\u00b2')
+            c3.metric('Ash (mayor)', f'{at["Ash"]:.3f} cm\u00b2')
+
+            st.markdown('**5. Zona protegida Lo**')
+            st.metric('Lo', f'{vr["Lo"]:.1f} cm')
+
+            st.markdown('**6. N\u00famero de ramales del estribo**')
+            c1, c2 = st.columns(2)
+            c1.metric('N\u00b0 exacto', f'{ram["n_exacto"]:.2f}')
+            c2.metric('N\u00b0 a usar', str(ram["n_usar"]))
+
+            st.markdown('**7. Separaci\u00f3n m\u00e1xima de estribos**')
+            c1, c2 = st.columns(2)
+            c1.metric('Dentro de Lo', f's < {se["dentro_Lo"]:.2f} cm')
+            c2.metric('Fuera de Lo', f's < {se["fuera_Lo"]:.2f} cm')
+
+            st.markdown('**8. Separaci\u00f3n del acero longitudinal**')
+            c1, c2 = st.columns(2)
+            c1.metric('Direcci\u00f3n B', f'{vr["separacion_long_B"]:.2f} cm')
+            c2.metric('Direcci\u00f3n H', f'{vr["separacion_long_H"]:.2f} cm')
+
+        # --- Expander 4: Biaxial ---
+        if abs(muy) > 0.01:
+            with st.expander('Verificaci\u00f3n biaxial ACI 318-19', expanded=True):
+                st.caption(
+                    'Cuando hay momentos en ambos ejes, los diagramas P\u2013Mx y P\u2013My '
+                    'no son suficientes. El contorno biaxial verifica la interaccion '
+                    'combinada (Mx, My) a carga axial Pu.'
+                )
+                try:
+                    contour = section.contorno_aci(pu_i)
+                    col1, col2 = st.columns([3, 2])
+                    with col1:
+                        st.pyplot(plot_contorno_aci(contour, mux_i, muy_i), use_container_width=True)
+                    with col2:
+                        mx_uni = float(np.max(np.abs(contour[:, 0]))) if len(contour) else 0
+                        my_uni = float(np.max(np.abs(contour[:, 1]))) if len(contour) else 0
+                        st.metric('\u03c6Mnx (uniaxial en Pu)', f'{mx_uni / ton:,.3f} tonf\u00b7m')
+                        st.metric('\u03c6Mny (uniaxial en Pu)', f'{my_uni / ton:,.3f} tonf\u00b7m')
+                        radial = np.hypot(mux_i, muy_i)
+                        cap_radial = np.hypot(mx_uni, my_uni)
+                        ratio = radial / cap_radial if cap_radial > 0 else 999
+                        st.metric('D/C radial', f'{ratio:.3f}')
+                        if ratio <= 1:
+                            st.success('CUMPLE \u2014 La demanda esta dentro del contorno ACI.')
+                        else:
+                            st.error('FALLA \u2014 La demanda excede el contorno ACI.')
+                        st.caption('D/C = distancia demanda / distancia contorno en misma direccion.')
+                except Exception as e:
+                    st.error(f'Biaxial: {e}')
+
+        # --- Expander 5: Supuestos ---
+        if esp_msgs:
+            with st.expander('Errores de espaciamiento', expanded=True):
+                for msg in esp_msgs:
+                    st.error(msg)
+
+        with st.expander('Supuestos t\u00e9cnicos del c\u00e1lculo', expanded=False):
             st.markdown(
                 '- **\u03b5cu = 0.003**: Deformacion maxima del concreto en compresion segun ACI 318-19.\n'
                 '- **Bloque rectangular de Whitney**: Distribucion simplificada del esfuerzo de compresion '
@@ -631,8 +840,3 @@ if __name__ == "__main__":
                 'transicion lineal segun ACI 318-19 \u00a721.2.\n'
                 '- **Columnas con estribos**: Factor de confinamiento 0.80 para Pn,max (ACI \u00a722.4.2).'
             )
-
-        if esp_msgs:
-            with st.expander('Errores de espaciamiento', expanded=True):
-                for msg in esp_msgs:
-                    st.error(msg)

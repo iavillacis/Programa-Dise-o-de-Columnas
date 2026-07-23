@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Columnas ACI 318-19</title>
+<style>
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f1f5f9;color:#0f172a;margin:0;padding:1.5rem}
+header{background:linear-gradient(135deg,#1e3a5f,#172554);color:#fff;padding:1.5rem 2rem;border-radius:12px;margin-bottom:1.5rem;box-shadow:0 4px 12px #00000020}
+header h1{margin:0;font-size:1.6rem}
+header p{margin:.5rem 0 0;opacity:.85;font-size:.95rem}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:1.2rem}
+.card{background:#fff;padding:1.2rem;border-radius:10px;box-shadow:0 1px 4px #00000018;margin-bottom:1.2rem}
+.card h2{margin:0 0 .8rem;font-size:1.2rem;color:#1e3a5f;border-bottom:2px solid #e2e8f0;padding-bottom:.4rem}
+table{width:100%;border-collapse:collapse;font-size:.9rem}
+td,th{padding:.5rem .4rem;border:1px solid #cbd5e1;text-align:left}
+th{background:#f8fafc;font-weight:600}
+img{max-width:100%;height:auto;display:block}
+.ok{color:#16a34a;font-weight:700}
+.fail{color:#dc2626;font-weight:700}
+.error{color:#dc2626;background:#fee2e2;padding:.5rem .8rem;border-radius:6px;margin:.5rem 0}
+.params{display:flex;flex-wrap:wrap;gap:.5rem 1.2rem;font-size:.9rem}
+.params span{background:#f1f5f9;padding:.25rem .6rem;border-radius:4px}
+.summary-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.8rem;margin:.8rem 0}
+.summary-item{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:.6rem .8rem;text-align:center}
+.summary-item .label{font-size:.75rem;text-transform:uppercase;color:#64748b;letter-spacing:.03em}
+.summary-item .value{font-size:1.1rem;font-weight:700;color:#0f172a;margin-top:.15rem}
+.summary-item .status{font-size:.85rem;margin-top:.2rem}
+table.matrix{border-collapse:collapse;margin:.5rem auto}
+table.matrix td{width:2.5rem;height:2.5rem;text-align:center;border:1px solid #94a3b8;padding:0;font-size:.85rem}
+table.matrix td.corner{background:#dbeafe;font-weight:700}
+@media(max-width:768px){
+  .grid-2{grid-template-columns:1fr}
+  body{padding:.8rem}
+}
+</style>
+</head>
+<body>
+<header>
+<h1>Columnas de concreto armado &middot; ACI 318-19</h1>
+<p>B=$b_cm cm &times; H=$h_cm cm | f&prime;c=$fc_val kgf/cm&sup2; | fy=$fy_val kgf/cm&sup2; | Estribo &phi;$tie_mm mm</p>
+</header>
+
+<div class="params">
+<span>B=$b_cm cm</span>
+<span>H=$h_cm cm</span>
+<span>r=$rec_cm cm</span>
+<span>Estribo &phi;$tie_mm mm</span>
+<span>f&prime;c=$fc_val kgf/cm&sup2;</span>
+<span>fy=$fy_val kgf/cm&sup2;</span>
+<span>n_B=$n_B</span>
+<span>n_H=$n_H</span>
+<span>&phi;L=$diam_long mm</span>
+<span>&phi;Esq=$diam_corner mm</span>
+<span>L=$L_val cm</span>
+<span>s_est=$s_estribo cm</span>
+<span>Pu=$pu_val tonf</span>
+<span>Mux=$mux_val tonf&middot;m</span>
+<span>Muy=$muy_val tonf&middot;m</span>
+</div>
+
+$espaciado_html
+
+<div class="grid-2">
+<div class="card"><img src="data:image/png;base64,$img_x" style="width:100%"></div>
+<div class="card"><img src="data:image/png;base64,$img_y" style="width:100%"></div>
+</div>
+
+$biaxial_html
+
+<div class="grid-2">
+<div class="card"><img src="data:image/png;base64,$img_sec" style="width:100%"></div>
+<div class="card">
+<h2>Propiedades de la secci&oacute;n</h2>
+<table>
+<tr><th>Propiedad</th><th>Valor</th><th>Descripci&oacute;n</th></tr>
+<tr><td>Ag</td><td>$ag_val cm&sup2;</td><td>&Aacute;rea bruta de concreto</td></tr>
+<tr><td>Ast</td><td>$ast_val cm&sup2;</td><td>&Aacute;rea total de acero longitudinal</td></tr>
+<tr><td>&rho;</td><td>$rho_val</td><td>Cuant&iacute;a = Ast/Ag</td></tr>
+<tr><td>P0 nominal</td><td>$p0_val tonf</td><td>Capacidad en compresi&oacute;n pura</td></tr>
+<tr><td>Pn,max nominal</td><td>$pnmax_val tonf</td><td>M&aacute;x. nominal = 0.80&middot;P0</td></tr>
+<tr><td>&phi;Pn,max</td><td>$phipmax_val tonf</td><td>Capacidad de dise&ntilde;o = 0.65&middot;Pn,max</td></tr>
+</table>
+</div>
+</div>
+
+$verificacion_html
+
+<div class="card">
+<h2>Matriz de barras (mm)</h2>
+$matrix_html
+</div>
+
+</body>
+</html>
