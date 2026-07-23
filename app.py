@@ -1,8 +1,12 @@
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import pandas as pd
-import streamlit as st
 from io import BytesIO
+from base64 import b64encode
+from html import escape
+from urllib.parse import parse_qs
 
 m = 1.0
 cm = 0.01 * m
@@ -27,11 +31,11 @@ class Rebar:
 
     def define_acero(self):
         filas, columnas = self.matrix.shape
-        matriz_areas = np.zeros((filas, columnas))
+        mz = np.zeros((filas, columnas))
         for i in range(filas):
             for j in range(columnas):
-                matriz_areas[i, j] = self.area(self.matrix[i, j])
-        return matriz_areas
+                mz[i, j] = self.area(self.matrix[i, j])
+        return mz
 
 
 class VariablesGenerales:
@@ -157,8 +161,7 @@ class DiagramaInteraccion:
             m_list.append(mn)
             pp_list.append(phi * pn)
             mp_list.append(phi * mn)
-        pmax = self.pn_max()
-        return p_list, m_list, pp_list, mp_list, pmax
+        return p_list, m_list, pp_list, mp_list, self.pn_max()
 
     @staticmethod
     def _clip_polygon(polygon, nx, ny, limit):
@@ -242,26 +245,19 @@ class DiagramaInteraccion:
 def plot_diagram(section, eje, pu, mu):
     pn, mn, pp, mp, pmax = section.curva_interaccion(eje)
     fig, ax = plt.subplots(figsize=(7, 5))
-
     mn_neg = [-x for x in mn]
     mp_neg = [-x for x in mp]
-
     ax.plot([x / ton for x in mn], [x / ton for x in pn], 'k--', lw=1.5, label='Capacidad nominal')
     ax.plot([x / ton for x in mn_neg], [x / ton for x in pn], 'k--', lw=1.5)
     ax.plot([x / ton for x in mp], [x / ton for x in pp], 'b-', lw=2, label='Capacidad \u03c6')
     ax.plot([x / ton for x in mp_neg], [x / ton for x in pp], 'b-', lw=2)
-
-    phi_pmax = 0.65 * pmax
-    ax.axhline(phi_pmax / ton, color='orange', lw=1.3, label='\u03c6Pn,max')
+    ax.axhline(0.65 * pmax / ton, color='orange', lw=1.3, label='\u03c6Pn,max')
     ax.axhline(0, color='black', lw=0.7)
     ax.axvline(0, color='black', lw=0.7)
-
     ax.scatter([mu / ton], [pu / ton], color='red', s=50, zorder=5, label='Demanda')
-
     ax.grid(color='silver', linestyle='--', linewidth=0.5)
     title = 'Mx' if eje == 'x' else 'My'
-    ax.set(xlabel=f'{title} (tonf\u00b7m)', ylabel='P (tonf)',
-           title=f'Diagrama P\u2013{title}')
+    ax.set(xlabel=f'{title} (tonf\u00b7m)', ylabel='P (tonf)', title=f'Diagrama P\u2013{title}')
     ax.legend(fontsize=8)
     fig.tight_layout()
     return fig
@@ -270,15 +266,14 @@ def plot_diagram(section, eje, pu, mu):
 def plot_contorno_aci(contour, mux, muy):
     closed = np.vstack((contour, contour[:1]))
     fig, ax = plt.subplots(figsize=(6.5, 5.2))
-    ax.fill(closed[:, 0] / ton, closed[:, 1] / ton, color='#bae6fd', alpha=0.55, label='Regi\u00f3n resistente')
+    ax.fill(closed[:, 0] / ton, closed[:, 1] / ton, color='#bae6fd', alpha=0.55, label='Region resistente')
     ax.plot(closed[:, 0] / ton, closed[:, 1] / ton, color='#0284c7', lw=2, label='Contorno ACI \u03c6P = Pu')
     ax.scatter([mux / ton], [muy / ton], color='red', s=48, zorder=5, label='Demanda')
     ax.axhline(0, color='black', lw=0.7)
     ax.axvline(0, color='black', lw=0.7)
     ax.set_aspect('equal', adjustable='box')
     ax.grid(color='silver', linestyle='--', linewidth=0.5)
-    ax.set(xlabel='Mx (tonf\u00b7m)', ylabel='My (tonf\u00b7m)',
-           title='Contorno biaxial ACI 318-19')
+    ax.set(xlabel='Mx (tonf\u00b7m)', ylabel='My (tonf\u00b7m)', title='Contorno biaxial ACI 318-19')
     ax.legend(fontsize=8)
     fig.tight_layout()
     return fig
@@ -289,125 +284,251 @@ def plot_section(section):
     ax.add_patch(plt.Rectangle((0, 0), section.b / cm, section.h / cm,
                                 fill=False, lw=2, color='#1e293b'))
     for x, y, area, n, db in section._bars:
-        ax.add_patch(plt.Circle((x / cm, y / cm), db / (2 * cm),
-                                color='#b91c1c', alpha=0.9))
-        ax.text(x / cm, y / cm, f'#{int(n)}', color='white',
-                ha='center', va='center', fontsize=7)
+        r = db / (2 * cm)
+        ax.add_patch(plt.Circle((x / cm, y / cm), r, color='#b91c1c', alpha=0.9))
+        ax.text(x / cm, y / cm, f'#{int(n)}', color='white', ha='center', va='center', fontsize=7)
     ax.set_aspect('equal')
     ax.invert_yaxis()
-    ax.set(xlabel='B (cm)', ylabel='H (cm)', title='Distribuci\u00f3n de acero')
+    ax.set(xlabel='B (cm)', ylabel='H (cm)', title='Distribucion de acero')
     ax.grid(alpha=0.25)
     fig.tight_layout()
     return fig
 
 
-def figure_to_base64(fig):
+def fig_to_b64(fig):
     buf = BytesIO()
     fig.savefig(buf, format='png', dpi=130, bbox_inches='tight')
     plt.close(fig)
-    from base64 import b64encode
     return b64encode(buf.getvalue()).decode('ascii')
 
 
-def default_matrix():
-    return pd.DataFrame([[8, 8, 8, 8], [8, 0, 0, 8], [8, 0, 0, 8], [8, 8, 8, 8]],
-                        columns=['C1', 'C2', 'C3', 'C4'])
+def _parse_matrix(raw):
+    rows = [[int(x.strip()) for x in row.split(',')] for row in raw.split(';') if row.strip()]
+    if not rows or any(len(r) != len(rows[0]) for r in rows):
+        raise ValueError("Matriz invalida: use filas separadas por ; y columnas por ,")
+    return np.array(rows, dtype=int)
 
 
-st.set_page_config(page_title='Columnas ACI 318-19', page_icon='\U0001f3d7\ufe0f', layout='wide')
-st.title('Columnas de concreto armado \u00b7 ACI 318-19')
-st.caption('Diagramas P\u2013M por compatibilidad de deformaciones y verificaci\u00f3n biaxial ACI.')
-
-with st.sidebar:
-    st.header('Datos de entrada')
-    st.caption('Unidades: cm, kgf/cm\u00b2, tonf, tonf\u00b7m.')
-    b = st.number_input('B', min_value=10.0, value=40.0, step=1.0)
-    h = st.number_input('H', min_value=10.0, value=40.0, step=1.0)
-    rec = st.number_input('Recubrimiento r', min_value=1.0, value=4.0, step=0.5)
-    tie = st.selectbox('Estribo', [2, 3, 4, 5], index=1,
-                       format_func=lambda n: f'Barra #{n}')
-    fc = st.number_input("f\'c", min_value=100.0, value=280.0, step=10.0)
-    fy = st.number_input('fy', min_value=2000.0, value=4200.0, step=100.0)
-    st.subheader('Acero longitudinal')
-    st.caption('0 = vac\u00edo. Barras: #2\u2013#8, #10.')
-    matrix = st.data_editor(default_matrix(), num_rows='dynamic',
-                            use_container_width=True, key='armado',
-                            column_config={c: st.column_config.NumberColumn(c, min_value=0, step=1)
-                                           for c in default_matrix().columns})
-    st.subheader('Demandas')
-    pu = st.number_input('Pu', value=300.0, step=5.0)
-    mux = st.number_input('Mux', value=25.0, step=1.0)
-    muy = st.number_input('Muy', value=15.0, step=1.0)
-
-try:
-    raw_matrix = matrix.fillna(0).astype(int).to_numpy()
-    section = DiagramaInteraccion(b * cm, h * cm, rec * cm, tie,
-                                  fc * kgf / (cm**2), fy * kgf / (cm**2), raw_matrix)
-    rho_val = section.rho()
-    if rho_val > 0.08:
-        st.error(f'Cuant\u00eda {rho_val:.2%}: excede el m\u00e1ximo de 8%.')
-        st.stop()
-    if rho_val < 0.01:
-        st.warning(f'Cuant\u00eda longitudinal {rho_val:.2%}: menor al 1% m\u00ednimo ACI.')
-except Exception as e:
-    st.error(f'Error en datos: {e}')
-    st.stop()
-
-pu_i = pu * ton
-mux_i = mux * ton * m
-muy_i = muy * ton * m
-
-st.subheader('Diagramas de interacci\u00f3n P\u2013M')
-col1, col2 = st.columns(2)
-with col1:
-    st.pyplot(plot_diagram(section, 'x', pu_i, mux_i), use_container_width=True)
-with col2:
-    st.pyplot(plot_diagram(section, 'y', pu_i, muy_i), use_container_width=True)
-st.caption('Curva nominal (negro discontinuo), curva \u03c6 (azul), l\u00edmite \u03c6Pn,max (naranja) y punto de demanda (rojo).')
-
-es_biaxial = abs(muy) > 0.01
-if es_biaxial:
-    st.subheader('Verificaci\u00f3n biaxial ACI 318-19')
+def app(environ, start_response):
+    qs = parse_qs(environ.get('QUERY_STRING', ''), keep_blank_values=True)
+    if environ.get('PATH_INFO', '/') == '/health':
+        body = b'{"status":"ok"}'
+        start_response('200 OK', [('Content-Type', 'application/json; charset=utf-8')])
+        return [body]
+    html = ''
     try:
-        contour = section.contorno_aci(pu_i)
-        col1, col2 = st.columns([3, 2])
-        with col1:
-            fig = plot_contorno_aci(contour, mux_i, muy_i)
-            st.pyplot(fig, use_container_width=True)
-        with col2:
-            mx_uni = float(np.max(np.abs(contour[:, 0]))) if len(contour) else 0
-            my_uni = float(np.max(np.abs(contour[:, 1]))) if len(contour) else 0
-            st.metric('\u03c6Mnx (uniaxial en Pu)', f'{mx_uni / ton:,.3f} tonf\u00b7m')
-            st.metric('\u03c6Mny (uniaxial en Pu)', f'{my_uni / ton:,.3f} tonf\u00b7m')
-            dx, dy = mux_i, muy_i
-            radial = np.hypot(dx, dy)
-            cap_radial = np.hypot(mx_uni, my_uni)
-            ratio = radial / cap_radial if cap_radial > 0 else 999
-            st.metric('Relaci\u00f3n D/C (radial)', f'{ratio:.3f}')
-            if ratio <= 1:
-                st.success('CUMPLE \u2014 La demanda est\u00e1 dentro del contorno ACI.')
-            else:
-                st.error('FALLA \u2014 La demanda excede el contorno ACI.')
-            st.caption('Contorno de carga ACI 318-19 por compatibilidad de deformaciones.')
+        b = float(qs.get('b', ['40'])[0])
+        h = float(qs.get('h', ['40'])[0])
+        rec = float(qs.get('rec', ['4'])[0])
+        tie = int(qs.get('tie', ['3'])[0])
+        fc = float(qs.get('fc', ['280'])[0])
+        fy = float(qs.get('fy', ['4200'])[0])
+        pu = float(qs.get('pu', ['300'])[0])
+        mux = float(qs.get('mux', ['25'])[0])
+        muy = float(qs.get('muy', ['15'])[0])
+        raw_mat = qs.get('armado', ['8,8,8,8;8,0,0,8;8,0,0,8;8,8,8,8'])[0]
+
+        mat = _parse_matrix(raw_mat)
+        sec = DiagramaInteraccion(b * cm, h * cm, rec * cm, tie,
+                                  fc * kgf / (cm**2), fy * kgf / (cm**2), mat)
+
+        fig1 = plot_diagram(sec, 'x', pu * ton, mux * ton * m)
+        fig2 = plot_diagram(sec, 'y', pu * ton, muy * ton * m)
+        fig3 = plot_section(sec)
+        img1 = fig_to_b64(fig1)
+        img2 = fig_to_b64(fig2)
+        img3 = fig_to_b64(fig3)
+
+        biaxial_html = ''
+        if abs(muy) > 0.01:
+            try:
+                contour = sec.contorno_aci(pu * ton)
+                fig4 = plot_contorno_aci(contour, mux * ton * m, muy * ton * m)
+                img4 = fig_to_b64(fig4)
+                mx_uni = float(np.max(np.abs(contour[:, 0]))) / ton
+                my_uni = float(np.max(np.abs(contour[:, 1]))) / ton
+                radial = np.hypot(mux, muy)
+                cap_radial = np.hypot(mx_uni, my_uni)
+                ratio = radial / cap_radial if cap_radial > 0 else 999
+                status = 'CUMPLE' if ratio <= 1 else 'FALLA'
+                biaxial_html = f'''
+                <h2>Verificacion biaxial ACI 318-19</h2>
+                <div class="grid">
+                <div><img src="data:image/png;base64,{img4}" style="max-width:100%"></div>
+                <div>
+                <p><b>φMnx:</b> {mx_uni:,.3f} tonf·m</p>
+                <p><b>φMny:</b> {my_uni:,.3f} tonf·m</p>
+                <p><b>D/C:</b> {ratio:.3f}</p>
+                <p class="{'ok' if ratio<=1 else 'fail'}"><b>{status}</b></p>
+                </div></div>
+                '''
+            except Exception as e:
+                biaxial_html = f'<p class="error">Biaxial: {escape(str(e))}</p>'
+
+        ag = sec.ag() / cm**2
+        ast = sec.ast() / cm**2
+        rho = sec.rho()
+        p0 = sec.p0() / ton
+        pnmax = sec.pn_max() / ton
+        phipmax = 0.65 * sec.pn_max() / ton
+
+        html = f'''<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Columnas ACI 318-19</title>
+<style>
+body{{font-family:sans-serif;background:#f1f5f9;color:#0f172a;margin:0;padding:1rem}}
+header{{background:#172554;color:#fff;padding:1rem;border-radius:10px;margin-bottom:1rem}}
+.grid{{display:grid;grid-template-columns:1fr 1fr;gap:1rem}}
+.card{{background:#fff;padding:1rem;border-radius:10px;box-shadow:0 1px 4px #00000020}}
+img{{max-width:100%;height:auto}}
+table{{width:100%;border-collapse:collapse}}
+td,th{{padding:.4rem;border:1px solid #cbd5e1;text-align:left}}
+.ok{{color:#16a34a;font-weight:bold}}
+.fail{{color:#dc2626;font-weight:bold}}
+.error{{color:#dc2626;background:#fee2e2;padding:.5rem;border-radius:6px}}
+form{{display:flex;flex-wrap:wrap;gap:.5rem;align-items:end;margin-bottom:1rem}}
+form label{{font-size:.85rem}}
+form input{{padding:.4rem;border:1px solid #94a3b8;border-radius:5px;width:90px}}
+form button{{background:#0284c7;color:#fff;border:0;padding:.5rem 1rem;border-radius:5px;cursor:pointer}}
+</style></head>
+<body>
+<header><h1>Columnas de concreto armado · ACI 318-19</h1>
+<p>Diagramas P–M por compatibilidad de deformaciones y verificacion biaxial ACI.</p></header>
+<form method="get">
+<label>B <input name="b" value="{b}"></label>
+<label>H <input name="h" value="{h}"></label>
+<label>r <input name="rec" value="{rec}"></label>
+<label>Estribo# <input name="tie" value="{tie}"></label>
+<label>f'c <input name="fc" value="{fc}"></label>
+<label>fy <input name="fy" value="{fy}"></label>
+<label>Pu <input name="pu" value="{pu}"></label>
+<label>Mux <input name="mux" value="{mux}"></label>
+<label>Muy <input name="muy" value="{muy}"></label>
+<label>Armado<br><textarea name="armado" rows="3" style="width:200px">{escape(raw_mat)}</textarea></label>
+<button>Calcular</button>
+</form>
+<div class="grid">
+<div class="card"><img src="data:image/png;base64,{img1}" style="width:100%"></div>
+<div class="card"><img src="data:image/png;base64,{img2}" style="width:100%"></div>
+</div>
+{biaxial_html}
+<div class="grid">
+<div class="card"><img src="data:image/png;base64,{img3}" style="width:100%"></div>
+<div class="card"><h2>Propiedades</h2>
+<table><tr><th>Propiedad</th><th>Valor</th></tr>
+<tr><td>Ag</td><td>{ag:.2f} cm²</td></tr>
+<tr><td>Ast</td><td>{ast:.2f} cm²</td></tr>
+<tr><td>ρ</td><td>{rho:.3%}</td></tr>
+<tr><td>P0 nominal</td><td>{p0:,.2f} tonf</td></tr>
+<tr><td>Pn,max nominal</td><td>{pnmax:,.2f} tonf</td></tr>
+<tr><td>φPn,max</td><td>{phipmax:,.2f} tonf</td></tr>
+</table>
+<p><small>εcu=0.003, bloque de Whitney, acero elastoplastico. Columnas con estribos (φ=0.65 compresion controlada).</small></p>
+</div></div>
+</body></html>'''
     except Exception as e:
-        st.error(f'No se pudo calcular el contorno biaxial: {e}')
+        html = f'<p class="error">Error: {escape(str(e))}</p>'
+    body = html.encode('utf-8')
+    start_response('200 OK', [('Content-Type', 'text/html; charset=utf-8')])
+    return [body]
 
-st.subheader('Geometr\u00eda de la secci\u00f3n')
-c1, c2 = st.columns([1, 1])
-with c1:
-    st.pyplot(plot_section(section), use_container_width=True)
-with c2:
-    data = {
-        'Propiedad': ['Ag', 'Ast', '\u03c1', 'P0 nominal', 'Pn,max nominal', '\u03c6Pn,max'],
-        'Valor': [f'{section.ag() / cm**2:.2f} cm\u00b2',
-                  f'{section.ast() / cm**2:.2f} cm\u00b2',
-                  f'{section.rho():.3%}',
-                  f'{section.p0() / ton:,.2f} tonf',
-                  f'{section.pn_max() / ton:,.2f} tonf',
-                  f'{0.65 * section.pn_max() / ton:,.2f} tonf'],
-    }
-    st.table(pd.DataFrame(data))
-    st.subheader('Matriz de barras')
-    st.dataframe(pd.DataFrame(raw_matrix), use_container_width=True, hide_index=True)
 
-st.caption('\u03b5cu = 0.003, bloque rectangular de Whitney, acero elastopl\u00e1stico perfecto. Columnas con estribos (\u03c6 = 0.65 en compresi\u00f3n controlada).')
+if __name__ == "__main__":
+    import streamlit as st
+
+    st.set_page_config(page_title='Columnas ACI 318-19', page_icon='\U0001f3d7\ufe0f', layout='wide')
+    st.title('Columnas de concreto armado \u00b7 ACI 318-19')
+    st.caption('Diagramas P\u2013M por compatibilidad de deformaciones y verificaci\u00f3n biaxial ACI.')
+
+    with st.sidebar:
+        st.header('Datos de entrada')
+        st.caption('Unidades: cm, kgf/cm\u00b2, tonf, tonf\u00b7m.')
+        b = st.number_input('B', min_value=10.0, value=40.0, step=1.0)
+        h = st.number_input('H', min_value=10.0, value=40.0, step=1.0)
+        rec = st.number_input('Recubrimiento r', min_value=1.0, value=4.0, step=0.5)
+        tie = st.selectbox('Estribo', [2, 3, 4, 5], index=1,
+                           format_func=lambda n: f'Barra #{n}')
+        fc = st.number_input("f\'c", min_value=100.0, value=280.0, step=10.0)
+        fy = st.number_input('fy', min_value=2000.0, value=4200.0, step=100.0)
+        st.subheader('Acero longitudinal')
+        st.caption('0 = vac\u00edo. Barras: #2\u2013#8, #10.')
+        matrix = st.data_editor(
+            pd.DataFrame([[8, 8, 8, 8], [8, 0, 0, 8], [8, 0, 0, 8], [8, 8, 8, 8]],
+                         columns=['C1', 'C2', 'C3', 'C4']),
+            num_rows='dynamic', use_container_width=True, key='armado',
+            column_config={c: st.column_config.NumberColumn(c, min_value=0, step=1)
+                           for c in ['C1', 'C2', 'C3', 'C4']})
+        st.subheader('Demandas')
+        pu = st.number_input('Pu', value=300.0, step=5.0)
+        mux = st.number_input('Mux', value=25.0, step=1.0)
+        muy = st.number_input('Muy', value=15.0, step=1.0)
+
+    try:
+        raw_matrix = matrix.fillna(0).astype(int).to_numpy()
+        section = DiagramaInteraccion(b * cm, h * cm, rec * cm, tie,
+                                      fc * kgf / (cm**2), fy * kgf / (cm**2), raw_matrix)
+        rho_val = section.rho()
+        if rho_val > 0.08:
+            st.error(f'Cuant\u00eda {rho_val:.2%}: excede el m\u00e1ximo de 8%.')
+            st.stop()
+        if rho_val < 0.01:
+            st.warning(f'Cuant\u00eda longitudinal {rho_val:.2%}: menor al 1% m\u00ednimo ACI.')
+    except Exception as e:
+        st.error(f'Error en datos: {e}')
+        st.stop()
+
+    pu_i = pu * ton
+    mux_i = mux * ton * m
+    muy_i = muy * ton * m
+
+    st.subheader('Diagramas de interacci\u00f3n P\u2013M')
+    col1, col2 = st.columns(2)
+    with col1:
+        st.pyplot(plot_diagram(section, 'x', pu_i, mux_i), use_container_width=True)
+    with col2:
+        st.pyplot(plot_diagram(section, 'y', pu_i, muy_i), use_container_width=True)
+    st.caption('Curva nominal (negro discontinuo), curva \u03c6 (azul), l\u00edmite \u03c6Pn,max (naranja) y punto de demanda (rojo).')
+
+    if abs(muy) > 0.01:
+        st.subheader('Verificaci\u00f3n biaxial ACI 318-19')
+        try:
+            contour = section.contorno_aci(pu_i)
+            col1, col2 = st.columns([3, 2])
+            with col1:
+                st.pyplot(plot_contorno_aci(contour, mux_i, muy_i), use_container_width=True)
+            with col2:
+                mx_uni = float(np.max(np.abs(contour[:, 0]))) if len(contour) else 0
+                my_uni = float(np.max(np.abs(contour[:, 1]))) if len(contour) else 0
+                st.metric('\u03c6Mnx (uniaxial en Pu)', f'{mx_uni / ton:,.3f} tonf\u00b7m')
+                st.metric('\u03c6Mny (uniaxial en Pu)', f'{my_uni / ton:,.3f} tonf\u00b7m')
+                radial = np.hypot(mux_i, muy_i)
+                cap_radial = np.hypot(mx_uni, my_uni)
+                ratio = radial / cap_radial if cap_radial > 0 else 999
+                st.metric('Relaci\u00f3n D/C (radial)', f'{ratio:.3f}')
+                if ratio <= 1:
+                    st.success('CUMPLE \u2014 La demanda est\u00e1 dentro del contorno ACI.')
+                else:
+                    st.error('FALLA \u2014 La demanda excede el contorno ACI.')
+                st.caption('Contorno de carga ACI 318-19 por compatibilidad de deformaciones.')
+        except Exception as e:
+            st.error(f'No se pudo calcular el contorno biaxial: {e}')
+
+    st.subheader('Geometr\u00eda de la secci\u00f3n')
+    c1, c2 = st.columns([1, 1])
+    with c1:
+        st.pyplot(plot_section(section), use_container_width=True)
+    with c2:
+        data = {
+            'Propiedad': ['Ag', 'Ast', '\u03c1', 'P0 nominal', 'Pn,max nominal', '\u03c6Pn,max'],
+            'Valor': [f'{section.ag() / cm**2:.2f} cm\u00b2',
+                      f'{section.ast() / cm**2:.2f} cm\u00b2',
+                      f'{section.rho():.3%}',
+                      f'{section.p0() / ton:,.2f} tonf',
+                      f'{section.pn_max() / ton:,.2f} tonf',
+                      f'{0.65 * section.pn_max() / ton:,.2f} tonf'],
+        }
+        st.table(pd.DataFrame(data))
+        st.subheader('Matriz de barras')
+        st.dataframe(pd.DataFrame(raw_matrix), use_container_width=True, hide_index=True)
+
+    st.caption('\u03b5cu = 0.003, bloque rectangular de Whitney, acero elastopl\u00e1stico perfecto. Columnas con estribos (\u03c6 = 0.65 en compresi\u00f3n controlada).')
