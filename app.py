@@ -7,7 +7,9 @@ mostrados usan cm, kgf/cm² y tonf para conservar la práctica habitual de dise�
 from __future__ import annotations
 
 from dataclasses import dataclass
+from html import escape
 from typing import Iterable
+from urllib.parse import parse_qs
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -363,6 +365,67 @@ def plot_section(section: DiagramaInteraccion):
 def default_matrix() -> pd.DataFrame:
     return pd.DataFrame([[8, 8, 8, 8], [8, 0, 0, 8], [8, 0, 0, 8], [8, 8, 8, 8]],
                         columns=["C1", "C2", "C3", "C4"])
+
+
+def _vercel_number(values: dict[str, list[str]], name: str, default: float) -> float:
+    """Obtiene un campo numérico de la calculadora WSGI de Vercel."""
+    raw = values.get(name, [str(default)])[0].strip().replace(",", ".")
+    return float(raw)
+
+
+def _vercel_matrix(values: dict[str, list[str]]) -> np.ndarray:
+    raw = values.get("armado", ["8,8,8,8;8,0,0,8;8,0,0,8;8,8,8,8"])[0]
+    rows = [[int(item.strip()) for item in row.split(",")] for row in raw.split(";") if row.strip()]
+    if not rows or any(len(row) != len(rows[0]) for row in rows):
+        raise GeometriaError("La matriz debe usar filas separadas por ; y columnas separadas por ,.")
+    return np.asarray(rows, dtype=int)
+
+
+def _vercel_page(values: dict[str, list[str]]) -> str:
+    """Vista HTML compacta para Vercel; reutiliza el mismo núcleo de cálculo."""
+    defaults = {"b": 40.0, "h": 40.0, "rec": 4.0, "tie": 3.0, "fc": 280.0, "fy": 4200.0,
+                "pu": 300.0, "mux": 25.0, "muy": 15.0, "vu": 35.0, "s": 15.0}
+    current = {name: values.get(name, [str(default)])[0] for name, default in defaults.items()}
+    armed = values.get("armado", ["8,8,8,8;8,0,0,8;8,0,0,8;8,8,8,8"])[0]
+    results = ""
+    try:
+        data = {name: _vercel_number(values, name, default) for name, default in defaults.items()}
+        section = DiagramaInteraccion(data["b"] * cm, data["h"] * cm, data["rec"] * cm, int(data["tie"]),
+                                      data["fc"] * kgf / cm**2, data["fy"] * kgf / cm**2, _vercel_matrix(values))
+        biaxial = section.verificar_biaxial(data["pu"] * ton, data["mux"] * ton * m, data["muy"] * ton * m)
+        shear = section.verificar_cortante(data["pu"] * ton, data["vu"] * ton, data["s"] * cm)
+        biaxial_class = "ok" if biaxial["cumple"] else "fail"
+        shear_class = "ok" if data["vu"] * ton <= shear.phi_vn else "fail"
+        spacing = "No requerido por resistencia" if shear.s_requerido is None else f"{shear.s_requerido / cm:.2f} cm"
+        results = f"""
+        <section class=\"results\"><h2>Resultados</h2>
+        <div class=\"grid\"><article><h3>Sección</h3><p>Ag: <b>{section.ag / cm**2:.2f} cm²</b><br>Ast: <b>{section.ast / cm**2:.2f} cm²</b><br>ρ: <b>{section.rho:.3%}</b></p></article>
+        <article class=\"{biaxial_class}\"><h3>Biaxial · Bresler</h3><p>φPnx: <b>{biaxial['pnx'] / ton:.2f} tonf</b><br>φPny: <b>{biaxial['pny'] / ton:.2f} tonf</b><br>φP admisible: <b>{biaxial['padm'] / ton:.2f} tonf</b><br>D/C: <b>{biaxial['ratio']:.3f}</b><br><strong>{'CUMPLE' if biaxial['cumple'] else 'FALLA'}</strong></p></article>
+        <article class=\"{shear_class}\"><h3>Cortante</h3><p>Vc: <b>{shear.vc / ton:.2f} tonf</b><br>Vs: <b>{shear.vs / ton:.2f} tonf</b><br>φVn: <b>{shear.phi_vn / ton:.2f} tonf</b><br>Separación máxima: <b>{spacing}</b><br><strong>{'CUMPLE' if data['vu'] * ton <= shear.phi_vn else 'FALLA'}</strong></p></article></div></section>"""
+    except (ValueError, TypeError, GeometriaError, CuantiaError, BreslerError) as error:
+        results = f"<p class=\"error\"><strong>Datos no válidos:</strong> {escape(str(error))}</p>"
+
+    fields = "".join(
+        f'<label>{escape(name.upper())}<input name="{escape(name)}" type="number" step="any" value="{escape(str(current[name]))}"></label>'
+        for name in defaults
+    )
+    return f"""<!doctype html><html lang=\"es\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Columnas ACI 318-19</title>
+    <style>body{{font-family:system-ui,sans-serif;background:#f1f5f9;color:#0f172a;margin:0}}main{{max-width:1000px;margin:2rem auto;padding:0 1rem}}header{{background:#172554;color:white;padding:1.5rem;border-radius:12px}}form,.results{{background:white;padding:1.25rem;border-radius:12px;margin-top:1rem;box-shadow:0 2px 8px #0f172a18}}.fields,.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem}}label{{font-size:.82rem;font-weight:700}}input,textarea{{box-sizing:border-box;width:100%;margin-top:.3rem;padding:.55rem;border:1px solid #94a3b8;border-radius:6px}}textarea{{min-height:4.5rem}}button{{margin-top:1rem;background:#0284c7;color:white;border:0;border-radius:6px;padding:.65rem 1rem;font-weight:700;cursor:pointer}}article{{border-left:4px solid #64748b;padding:0 .85rem}}.ok{{border-color:#16a34a}}.fail,.error{{border-color:#dc2626;color:#991b1b}}.error{{background:#fee2e2;padding:1rem;border-radius:8px}}small{{color:#475569}}</style></head>
+    <body><main><header><h1>Columnas de concreto armado · ACI 318-19</h1><p>Calculadora serverless: flexocompresión biaxial por Bresler y cortante.</p></header>
+    <form method=\"get\"><h2>Datos de entrada</h2><div class=\"fields\">{fields}</div><label>Armado (0 = vacío; filas con ; y columnas con ,)<textarea name=\"armado\">{escape(armed)}</textarea></label><button type=\"submit\">Calcular</button><p><small>Unidades: B, H, r y s en cm; f'c/fy en kgf/cm²; Pu/Vu en tonf; Mux/Muy en tonf·m. Para diagramas P-M y editor gráfico completo, ejecute esta misma aplicación en Streamlit Cloud.</small></p></form>{results}</main></body></html>"""
+
+
+def app(environ, start_response):
+    """Entrada WSGI para Vercel; Vercel requiere esta variable en el módulo."""
+    if environ.get("PATH_INFO", "/") == "/health":
+        body = b'{"status":"ok"}'
+        start_response("200 OK", [("Content-Type", "application/json; charset=utf-8"),
+                                   ("Content-Length", str(len(body)))])
+        return [body]
+    body = _vercel_page(parse_qs(environ.get("QUERY_STRING", ""), keep_blank_values=True)).encode("utf-8")
+    start_response("200 OK", [("Content-Type", "text/html; charset=utf-8"),
+                               ("Content-Length", str(len(body)))])
+    return [body]
 
 
 def build_sidebar():
