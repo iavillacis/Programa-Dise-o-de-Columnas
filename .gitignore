@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Streamlit local settings and secrets
+.streamlit/secrets.toml
+
+# IDE and operating system files
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
