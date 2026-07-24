@@ -1,18 +1,38 @@
-import numpy as np
-from io import BytesIO
-from base64 import b64encode
-from html import escape
-from urllib.parse import parse_qs
-from string import Template
-import warnings
-import os
-import gc
-import sys
+# =============================================================================
+# PROGRAMA DE DISENO DE COLUMNAS DE CONCRETO ARMADO - ACI 318-19
+# =============================================================================
+# Este programa calcula la resistencia de columnas de concreto armado
+# con seccion rectangular, generando diagramas de interaccion P-M,
+# verificando requisitos ACI 318-19, y evaluando flexo-compresion biaxial.
+#
+# Funciona en DOS modos:
+#   1) MODO WEB (Streamlit): Interfaz grafica en navegador (ejecutar con:
+#      "streamlit run app.py")
+#   2) MODO WSGI (servidor): Genera HTML plano para servidores como
+#      gunicorn o Vercel (funcion: wsgi_app)
+# =============================================================================
 
-import verification
+# --- Librerias necesarias ---
+import numpy as np          # Calculos numericos y matrices
+from io import BytesIO      # Manejo de datos binarios en memoria
+from base64 import b64encode  # Codificar imagenes a texto base64
+from html import escape     # Escapar caracteres especiales HTML
+from urllib.parse import parse_qs  # Leer parametros de la URL
+from string import Template  # Remplazar variables en plantillas HTML
+import warnings             # Controlar mensajes de advertencia
+import os                   # Rutas de archivos
+import gc                   # Recolector de basura (liberar memoria)
+import sys                  # Acceder a modulos cargados del sistema
 
+import verification         # Modulo propio con verificaciones ACI 318-19
+
+# Variable global para cargar matplotlib SOLO cuando se necesita
+# (esto ahorra memoria y evita conflictos con Streamlit)
 _plt_mod = None
 
+# Funcion que carga matplotlib SOLO la primera vez que se necesita un grafico.
+# Esto evita ocupar memoria innecesaria al inicio y previene conflictos
+# entre el backend de Streamlit y el modo sin pantalla (Agg) del WSGI.
 def _plt():
     global _plt_mod
     if _plt_mod is None:
@@ -24,18 +44,31 @@ def _plt():
             _plt_mod = plt
             try:
                 from PIL import Image
-                Image.MAX_IMAGE_PIXELS = None
+                Image.MAX_IMAGE_PIXELS = None  # Evita error de "decompression bomb"
             except ImportError:
                 pass
     return _plt_mod
 
-m = 1.0
-cm = 0.01 * m
-mm = 0.001 * m
-kgf = 1.0
-ton = 1000.0 * kgf
+# =============================================================================
+# CONSTANTES DE UNIDADES
+# =============================================================================
+# El programa trabaja internamente en metros (m) y kilogramos-fuerza (kgf).
+# Los valores de entrada (cm, kgf/cm2, tonf) se convierten a estas unidades.
+m = 1.0          # 1 metro = unidad base de longitud
+cm = 0.01 * m    # 1 centimetro
+mm = 0.001 * m   # 1 milimetro
+kgf = 1.0        # 1 kilogramo-fuerza = unidad base de fuerza
+ton = 1000.0 * kgf  # 1 tonelada = 1000 kgf
 
 
+# =============================================================================
+# CLASE: VariablesGenerales
+# =============================================================================
+# Proporciona funciones auxiliares de material:
+#   - esfuerzo_acero: Calcula el esfuerzo en el acero segun su deformacion
+#     (modelo elastoplastico perfecto: lineal hasta fy, luego plastico).
+#   - beta1: Factor de profundidad del bloque rectangular de Whitney segun f'c.
+# =============================================================================
 class VariablesGenerales:
     def esfuerzo_acero(self, fy, es):
         Es = 2.0e6 * (kgf / (cm**2))
@@ -56,8 +89,23 @@ class VariablesGenerales:
             return 0.85 - 0.05 * (fc - 280) / 70.0
 
 
+# =============================================================================
+# CLASE PRINCIPAL: DiagramaInteraccion
+# =============================================================================
+# Esta clase representa una columna rectangular con armado definido por una
+# matriz de diametros (mm). Calcula:
+#   - Propiedades geometricas (Ag, Ast, cuantia)
+#   - Capacidad axial (P0, Pn,max)
+#   - Puntos de la curva de interaccion P-M (flexion uniaxial)
+#   - Contorno de interaccion biaxial (Mx vs My a Pu constante)
+#   - Verificacion de espaciamiento entre barras
+# =============================================================================
 class DiagramaInteraccion:
     def __init__(self, b, h, rec, tie_diameter_m, fc, fy, diam_mm_matrix):
+        # b = base (m), h = peralte (m), rec = recubrimiento (m)
+        # tie_diameter_m = diametro del estribo (m)
+        # fc = resistencia del concreto (kgf/m2), fy = fluencia del acero (kgf/m2)
+        # diam_mm_matrix = matriz n_H x n_B con diametros de barra en mm
         self.b = b
         self.h = h
         self.rec = rec
@@ -69,6 +117,7 @@ class DiagramaInteraccion:
         self._validate()
         self._bars = self._bar_coordinates(diam_mm_matrix)
 
+    # Valida que las dimensiones y materiales sean fisicamente posibles
     def _validate(self):
         if self.b <= 0 or self.h <= 0:
             raise ValueError("B y H deben ser mayores que cero.")
@@ -77,6 +126,9 @@ class DiagramaInteraccion:
         if self.fc <= 0 or self.fy <= 0:
             raise ValueError("f'c y fy deben ser mayores que cero.")
 
+    # Genera las coordenadas (x, y) de cada barra dentro de la seccion,
+    # distribuyendolas uniformemente respeptando recubrimiento y estribo.
+    # Devuelve una lista de tuplas: (x, y, area, diametro_mm, diametro_m)
     def _bar_coordinates(self, diam_mm_matrix):
         rows, cols = diam_mm_matrix.shape
         barras = []
@@ -106,6 +158,10 @@ class DiagramaInteraccion:
             raise ValueError("Debe existir al menos una barra longitudinal.")
         return barras
 
+    # Verifica que la separacion libre entre barras longitudinales
+    # sea mayor o igual a 2.5 cm (requisito ACI 318-19).
+    # Revisa en ambas direcciones: horizontal (filas) y vertical (columnas).
+    # Devuelve una lista de mensajes de advertencia (vacia si todo cumple).
     def verificar_espaciamiento(self):
         mensajes = []
         rows_dict = {}
@@ -136,6 +192,14 @@ class DiagramaInteraccion:
                     break
         return mensajes
 
+    # --- Propiedades basicas de la seccion ---
+    # ag(): Area bruta de concreto (b x h)
+    # ast(): Area total de acero longitudinal (suma de areas de barras)
+    # rho(): Cuantia de acero = Ast / Ag
+    # p0(): Capacidad axial nominal sin excentricidad (compresion pura)
+    #       P0 = 0.85*f'c*(Ag - Ast) + fy*Ast
+    # pn_max(): Maximo nominal admisible segun ACI (factor 0.80 para
+    #           columnas con estribos)
     def ag(self):
         return self.b * self.h
 
@@ -151,6 +215,9 @@ class DiagramaInteraccion:
     def pn_max(self):
         return 0.80 * self.p0()
 
+    # Agrupa las barras por capas (misma distancia desde la cara
+    # comprimida) para facilitar el calculo de la curva P-M.
+    # Devuelve lista de (distancia, area_total) ordenada.
     def capas_acero(self, eje, cara="superior"):
         depth = self.h if eje == "x" else self.b
         layers = {}
@@ -161,6 +228,10 @@ class DiagramaInteraccion:
             layers[key] = layers.get(key, 0.0) + area
         return sorted(layers.items())
 
+    # Factor de reduccion de capacidad (phi) segun ACI 318-19:
+    #   - Compresion controlada (et <= ey) -> phi = 0.65
+    #   - Traccion controlada (et >= 0.005) -> phi = 0.90
+    #   - Transicion lineal entre ambos
     def factor_phi(self, et):
         Es = 2.0e6 * (kgf / (cm**2))
         ey = self.fy / Es
@@ -171,6 +242,13 @@ class DiagramaInteraccion:
         else:
             return 0.65 + 0.25 * (et - ey) / (0.005 - ey)
 
+    # Calcula un solo punto (Pn, Mn, phi, et) de la curva de interaccion
+    # para una profundidad de eje neutro "c" dada.
+    # Usa las hipotesis de ACI 318-19:
+    #   - Deformacion maxima del concreto ecu = 0.003
+    #   - Bloque rectangular de Whitney (a = beta1 * c)
+    #   - Acero elastoplastico perfecto
+    #   - Secciones planas (distribucion lineal de deformaciones)
     def calcular_punto(self, c, eje="x", cara="superior"):
         if c <= 0:
             return 0, 0, 0, 0
@@ -198,6 +276,10 @@ class DiagramaInteraccion:
         phi = self.factor_phi(et)
         return pn, mn, phi, et
 
+    # Calcula la curva de interaccion P-M completa para un eje dado.
+    # Barre "n" valores de profundidad del eje neutro (c) desde muy
+    # pequeno (traccion pura) hasta 3 veces el peralte (compresion pura).
+    # Devuelve: (Pn, Mn, phi*Pn, phi*Mn, Pn_max)
     def curva_interaccion(self, eje="x", n=40):
         depth = self.h if eje == "x" else self.b
         c_values = np.linspace(0.01 * cm, 3.0 * depth, n)
@@ -210,6 +292,16 @@ class DiagramaInteraccion:
             mp_list.append(phi * mn)
         return p_list, m_list, pp_list, mp_list, self.pn_max()
 
+    # =====================================================================
+    # METODOS PARA FLEXO-COMPRESION BIAXIAL
+    # =====================================================================
+    # Cuando hay momentos en ambos ejes (Mx y My), el calculo uniaxial
+    # no es suficiente. Estos metodos evaluan la resistencia biaxial
+    # usando el plano neutro inclinado.
+
+    # Recorta el poligono de la seccion por una linea (plano neutro)
+    # definida por nx*x + ny*y = limit.
+    # Devuelve el poligono de la zona comprimida.
     @staticmethod
     def _clip_polygon(polygon, nx, ny, limit):
         clipped = []
@@ -226,6 +318,8 @@ class DiagramaInteraccion:
                                 first[1] + t * (second[1] - first[1])))
         return clipped
 
+    # Calcula el area y centroide de un poligono convexo
+    # (necesario para la resultante de compresion en el concreto).
     @staticmethod
     def _polygon_area_centroid(polygon):
         cross = [x1 * y2 - x2 * y1 for (x1, y1), (x2, y2) in zip(polygon, polygon[1:] + polygon[:1])]
@@ -236,6 +330,10 @@ class DiagramaInteraccion:
         cy = sum((y1 + y2) * v for (x1, y1), (x2, y2), v in zip(polygon, polygon[1:] + polygon[:1], cross)) / (3 * twice)
         return abs(twice) / 2, cx, cy
 
+    # Calcula un punto (phi*Pn, phi*Mnx, phi*Mny) para una profundidad
+    # de eje neutro "c" y un angulo de carga "theta".
+    # theta = 0  -> flexion en Mx
+    # theta = 90° -> flexion en My
     def calcular_punto_biaxial(self, c, theta):
         nx = float(np.cos(theta))
         ny = float(np.sin(theta))
@@ -266,6 +364,11 @@ class DiagramaInteraccion:
         phi = self.factor_phi(et)
         return phi * pn, phi * mx, phi * my
 
+    # Genera el contorno de interaccion biaxial ACI 318-19.
+    # Para cada angulo theta (24 direcciones), encuentra el par
+    # (phi*Mnx, phi*Mny) en el que la carga axial es igual a Pu.
+    # El contorno muestra la capacidad resistente para flexocompresion
+    # biaxial; si la demanda (Mux, Muy) cae dentro del contorno, cumple.
     def contorno_aci(self, pu, n_theta=24):
         if pu <= 0:
             raise ValueError("Pu debe ser mayor que cero (compresion).")
@@ -289,6 +392,15 @@ class DiagramaInteraccion:
         return np.asarray(contour)
 
 
+# =============================================================================
+# FUNCIONES DE GRAFICACION (matplotlib)
+# =============================================================================
+# Estas funciones crean las figuras que se muestran en la interfaz.
+# Usan _plt() para cargar matplotlib solo cuando es necesario.
+
+# Grafica el diagrama de interaccion P-M para un eje (x o y).
+# Muestra: curva nominal (negro punteado), curva de diseno phi (azul),
+# linea de phi*Pn,max (naranja), y la demanda (punto rojo).
 def plot_diagram(section, eje, pu, mu):
     pn, mn, pp, mp, pmax = section.curva_interaccion(eje)
     fig, ax = _plt().subplots(figsize=(7, 5.2))
@@ -312,6 +424,9 @@ def plot_diagram(section, eje, pu, mu):
     return fig
 
 
+# Grafica el contorno de interaccion biaxial ACI (Mx vs My) para
+# una carga axial Pu especifica. El area azul es la zona resistente;
+# si el punto rojo (demanda) esta dentro, la columna cumple.
 def plot_contorno_aci(contour, mux, muy):
     closed = np.vstack((contour, contour[:1]))
     fig, ax = _plt().subplots(figsize=(6.5, 5.5))
@@ -330,6 +445,8 @@ def plot_contorno_aci(contour, mux, muy):
     return fig
 
 
+# Dibuja la seccion transversal de la columna con sus barras de acero.
+# Cada circulo rojo es una barra; el numero dentro es el diametro (mm).
 def plot_section(section):
     _p = _plt()
     fig, ax = _p.subplots(figsize=(10, 8))
@@ -350,6 +467,13 @@ def plot_section(section):
     return fig
 
 
+# =============================================================================
+# FUNCIONES AUXILIARES DE SALIDA
+# =============================================================================
+
+# Convierte una figura de matplotlib a una imagen PNG codificada en
+# base64 (texto). Se usa en el modo WSGI para incrustar las imagenes
+# directamente en el HTML sin archivos externos.
 def fig_to_b64(fig):
     buf = BytesIO()
     fig.savefig(buf, format='png', dpi=85, bbox_inches='tight')
@@ -357,6 +481,10 @@ def fig_to_b64(fig):
     return b64encode(buf.getvalue()).decode('ascii')
 
 
+# Muestra una figura de matplotlib en la interfaz de Streamlit.
+# Renderiza la figura a PNG con DPI fijo (85) para evitar problemas
+# de resolucion, y usa st.image() en vez de st.pyplot() para tener
+# control completo sobre el rendereo.
 def st_fig(fig):
     from PIL import Image as _PIL
     _PIL.MAX_IMAGE_PIXELS = None
@@ -368,6 +496,15 @@ def st_fig(fig):
     _plt().close(fig)
 
 
+# =============================================================================
+# FUNCIONES DE MANEJO DE MATRICES
+# =============================================================================
+
+# Genera automaticamente la matriz de diametros de barras.
+# Crea una matriz n_H x n_B donde:
+#   - Las 4 esquinas usan diam_corner (acero de esquina)
+#   - El resto de las posiciones usan diam_long (acero longitudinal)
+# Esto evita que el usuario tenga que llenar la matriz manualmente.
 def generar_matriz_barras(n_B, n_H, diam_long, diam_corner):
     mat = np.full((n_H, n_B), diam_long)
     if n_B >= 1 and n_H >= 1:
@@ -381,6 +518,8 @@ def generar_matriz_barras(n_B, n_H, diam_long, diam_corner):
     return mat
 
 
+# Convierte la matriz de barras a una tabla HTML para el modo WSGI.
+# Las esquinas se resaltan con clase CSS "corner".
 def matriz_to_html(mat):
     rows, cols = mat.shape
     html = '<table class="matrix">'
@@ -400,6 +539,9 @@ def matriz_to_html(mat):
     return html
 
 
+# Convierte una cadena de texto "fila1,fila2;fila3,fila4" en una
+# matriz numpy. Se usa para leer el parametro "armado" de la URL en
+# el modo WSGI (por si se quiere pasar una matriz personalizada).
 def _parse_matrix(raw):
     rows = [[float(x.strip()) for x in row.split(',')] for row in raw.split(';') if row.strip()]
     if not rows or any(len(r) != len(rows[0]) for r in rows):
@@ -407,6 +549,13 @@ def _parse_matrix(raw):
     return np.array(rows, dtype=float)
 
 
+# =============================================================================
+# FUNCIONES DE GENERACION DE HTML (MODO WSGI)
+# =============================================================================
+
+# Convierte el diccionario de verificacion ACI en HTML formateado para
+# el reporte del modo WSGI. Muestra: geometria, acero, cuantia, estribos,
+# Lo, ramales, separaciones.
 def _verif_to_html(vr):
     geo = vr["geometria"]
     la = vr["acero_longitudinal"]
@@ -450,6 +599,14 @@ def _verif_to_html(vr):
 TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), 'templates', 'report.html')
 
 
+# =============================================================================
+# MODO WSGI (SERVIDOR)
+# =============================================================================
+# Esta funcion se activa cuando el programa corre en un servidor WSGI
+# (gunicorn, Vercel, etc.) en vez de Streamlit. Lee los parametros
+# desde la URL (?b=40&h=40&...), calcula todo, y devuelve una pagina
+# HTML completa con los resultados.
+# Para usar en Railway con gunicorn: gunicorn app:wsgi_app
 def wsgi_app(environ, start_response):
     import matplotlib as _mpl
     _mpl.use('Agg')
@@ -573,6 +730,17 @@ def wsgi_app(environ, start_response):
     return [body]
 
 
+# =============================================================================
+# MODO STREAMLIT (INTERFAZ WEB)
+# =============================================================================
+# Esta seccion se ejecuta SOLO cuando el archivo se corre directamente
+# con "streamlit run app.py" (no cuando se importa como modulo).
+# Crea la interfaz grafica con:
+#   - Sidebar: parametros de entrada (geometria, materiales, armado, demandas)
+#   - Boton CALCULAR
+#   - 5 expanders con resultados: Geometria, P-M, Verificacion ACI,
+#     Biaxial, Supuestos tecnicos
+# =============================================================================
 if __name__ == "__main__":
     import streamlit as st
 
@@ -654,8 +822,11 @@ if __name__ == "__main__":
     if "calcular" not in st.session_state:
         st.session_state.calcular = False
 
+    # --- Barra lateral (sidebar) con los datos de entrada ---
     with st.sidebar:
         st.header('Datos de entrada')
+
+        # ---- SECCION: GEOMETRIA DE LA COLUMNA ----
         st.subheader('Geometr\u00eda')
         b = st.number_input('B (cm)', min_value=10.0, value=40.0, step=1.0)
         h = st.number_input('H (cm)', min_value=10.0, value=40.0, step=1.0)
@@ -720,37 +891,40 @@ if __name__ == "__main__":
         mux_i = mux * ton * m
         muy_i = muy * ton * m
 
+        # =================================================================
+        # EXPANDER 1: GEOMETRIA Y PROPIEDADES DE LA SECCION
+        # Muestra la tabla de propiedades basicas (Ag, Ast, cuantia,
+        # capacidades) y la matriz de barras generada automaticamente.
+        # =================================================================
         # --- Expander 1: Geometria y Propiedades ---
         with st.expander('Geometr\u00eda y Propiedades de la secci\u00f3n', expanded=True):
-            col1, col2 = st.columns([7, 3])
-            with col1:
-                st_fig(plot_section(section))
-            with col2:
-                desc = [
-                    'Area bruta de concreto',
-                    'Area total de acero longitudinal',
-                    'Cuantia de refuerzo = Ast/Ag',
-                    'Capacidad en compresion pura (sin excentricidad)',
-                    'Maximo nominal admisible = 0.80 x P0',
-                    'Capacidad de diseno = 0.65 x Pn,max',
-                ]
-                data = {
-                    'Propiedad': ['Ag', 'Ast', '\u03c1', 'P0 nominal', 'Pn,max nominal', '\u03c6Pn,max'],
-                    'Valor': [
-                        f'{section.ag() / cm**2:.2f} cm\u00b2',
-                        f'{section.ast() / cm**2:.2f} cm\u00b2',
-                        f'{section.rho():.3%}',
-                        f'{section.p0() / ton:,.2f} tonf',
-                        f'{section.pn_max() / ton:,.2f} tonf',
-                        f'{0.65 * section.pn_max() / ton:,.2f} tonf',
-                    ],
-                    'Descripcion': desc,
-                }
-                st.table(data)
+            data = {
+                'Propiedad': ['Ag', 'Ast', '\u03c1', 'P0 nominal', 'Pn,max nominal', '\u03c6Pn,max'],
+                'Valor': [
+                    f'{section.ag() / cm**2:.2f} cm\u00b2',
+                    f'{section.ast() / cm**2:.2f} cm\u00b2',
+                    f'{section.rho():.3%}',
+                    f'{section.p0() / ton:,.2f} tonf',
+                    f'{section.pn_max() / ton:,.2f} tonf',
+                    f'{section.pn_max() * 0.65 / ton:,.2f} tonf',
+                ],
+            }
+            st.table(data)
 
-                st.markdown('**Matriz de barras (mm)**')
-                st.dataframe(raw_matrix, width='stretch', hide_index=True)
+            st.markdown('**Matriz de barras (mm)**')
+            st.dataframe(raw_matrix, width='stretch', hide_index=True)
 
+        # =================================================================
+        # EXPANDER 2: DIAGRAMAS DE INTERACCION P-M
+        # Muestra los diagramas de interaccion carga axial-momento
+        # para ambos ejes (Mx y My). Cada grafico incluye:
+        #   - Curva nominal (negra punteada)
+        #   - Curva de diseno con factor phi (azul)
+        #   - Linea de phi*Pn,max (naranja)
+        #   - Punto de demanda (rojo)
+        # Si la demanda esta dentro de la curva azul, la seccion es
+        # adecuada para esa combinacion de carga.
+        # =================================================================
         # --- Expander 2: Diagramas P-M ---
         with st.expander('Diagramas de interacci\u00f3n P\u2013M', expanded=True):
             st.caption(
@@ -764,6 +938,18 @@ if __name__ == "__main__":
             with col2:
                 st_fig(plot_diagram(section, 'y', pu_i, muy_i))
 
+        # =================================================================
+        # EXPANDER 3: VERIFICACION ACI 318-19
+        # Revisa que la columna cumpla todos los requisitos de ACI 318-19:
+        #   - Geometria (Ag, bc, Ac)
+        #   - Acero longitudinal (numero de varillas, area total)
+        #   - Cuantia minima (rho >= 1%)
+        #   - Acero transversal Ash (estribos)
+        #   - Zona protegida Lo (longitud de confinamiento)
+        #   - Numero de ramales del estribo
+        #   - Separacion maxima de estribos (dentro y fuera de Lo)
+        #   - Separacion del acero longitudinal
+        # =================================================================
         # --- Expander 3: Verificacion ACI 318-19 ---
         with st.expander('Verificaci\u00f3n ACI 318-19', expanded=True):
             vr = verification.verificar_columna(
@@ -825,6 +1011,14 @@ if __name__ == "__main__":
             c1.metric('Direcci\u00f3n B', f'{vr["separacion_long_B"]:.2f} cm')
             c2.metric('Direcci\u00f3n H', f'{vr["separacion_long_H"]:.2f} cm')
 
+        # =================================================================
+        # EXPANDER 4: VERIFICACION BIAXIAL ACI
+        # Solo aparece cuando Muy > 0.01 (hay momento en ambos ejes).
+        # La verificacion biaxial usa el metodo del contorno ACI:
+        # genera el contorno de interaccion (phi*Mnx, phi*Mny) para la
+        # carga axial Pu, y verifica si la demanda (Mux, Muy) esta dentro.
+        # Si D/C <= 1, la columna cumple; si D/C > 1, la columna falla.
+        # =================================================================
         # --- Expander 4: Biaxial ---
         if abs(muy) > 0.01:
             with st.expander('Verificaci\u00f3n biaxial ACI 318-19', expanded=True):
@@ -855,6 +1049,15 @@ if __name__ == "__main__":
                 except Exception as e:
                     st.error(f'Biaxial: {e}')
 
+        # =================================================================
+        # EXPANDER 5: SUPUESTOS TECNICOS
+        # Muestra las hipotesis de calculo utilizadas segun ACI 318-19:
+        #   - Deformacion maxima del concreto: ecu = 0.003
+        #   - Bloque rectangular de Whitney
+        #   - Acero elastoplastico perfecto
+        #   - Factor phi variable segun deformacion
+        #   - Factor de confinamiento 0.80 para columnas con estribos
+        # =================================================================
         # --- Expander 5: Supuestos ---
         if esp_msgs:
             with st.expander('Errores de espaciamiento', expanded=True):
