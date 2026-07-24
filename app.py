@@ -501,12 +501,19 @@ def st_fig(fig):
 # =============================================================================
 
 # Genera automaticamente la matriz de diametros de barras.
-# Crea una matriz n_H x n_B donde:
+# Crea una matriz n_H x n_B donde SOLO el perimetro tiene acero:
 #   - Las 4 esquinas usan diam_corner (acero de esquina)
-#   - El resto de las posiciones usan diam_long (acero longitudinal)
+#   - Los bordes (no esquinas) usan diam_long (acero longitudinal)
+#   - El centro queda CERO (sin acero) para confinar el hormigon
 # Esto evita que el usuario tenga que llenar la matriz manualmente.
 def generar_matriz_barras(n_B, n_H, diam_long, diam_corner):
-    mat = np.full((n_H, n_B), diam_long)
+    mat = np.zeros((n_H, n_B))
+    if n_H >= 1 and n_B >= 1:
+        mat[0, :] = diam_long     # primera fila
+        mat[-1, :] = diam_long    # ultima fila
+    if n_H > 2:
+        mat[1:-1, 0] = diam_long   # primera columna (excepto esquinas)
+        mat[1:-1, -1] = diam_long  # ultima columna (excepto esquinas)
     if n_B >= 1 and n_H >= 1:
         mat[0, 0] = diam_corner
     if n_B >= 2:
