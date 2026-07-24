@@ -971,7 +971,7 @@ if __name__ == "__main__":
         font-family: system-ui, -apple-system, sans-serif;
     ">
         <img src="data:image/png;base64,{_espe}"
-             style="height:95px;width:auto;object-fit:contain;filter:brightness(0)invert(1);">
+             style="height:95px;width:auto;object-fit:contain;border-radius:8px;">
 
         <div style="text-align:center;flex:1;padding:0 2rem;">
             <div style="color:rgba(255,255,255,0.72);font-size:0.95rem;font-weight:500;">
@@ -1003,7 +1003,19 @@ if __name__ == "__main__":
 
     # --- Barra lateral (sidebar) con los datos de entrada ---
     with st.sidebar:
-        st.header('Datos de entrada')
+        st.markdown("""
+        <div style="
+            background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+            padding: 0.7rem 1rem;
+            border-radius: 10px;
+            text-align: center;
+            margin-bottom: 1rem;
+        ">
+            <span style="color:white;font-size:1.3rem;font-weight:700;letter-spacing:0.04em;">
+                Datos de entrada
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
 
         # ---- SECCION: GEOMETRIA DE LA COLUMNA ----
         st.subheader('Geometr\u00eda')
@@ -1248,6 +1260,41 @@ if __name__ == "__main__":
                         cap_radial = np.hypot(mx_uni, my_uni)
                         ratio = radial / cap_radial if cap_radial > 0 else 999
                         st.metric('D/C radial', f'{ratio:.3f}')
+
+                        _n_vars = n_B * n_H
+                        _sec_cm2 = b * h
+                        _rho_pct = rho_val * 100
+                        st.markdown(f"""
+                        <div style="
+                            background:#f8fafc;
+                            border:1px solid #e2e8f0;
+                            border-radius:10px;
+                            padding:0.7rem 0.9rem;
+                            margin:0.6rem 0;
+                            font-size:0.80rem;
+                            line-height:1.5;
+                        ">
+                            <strong>An\u00e1lisis del contorno biaxial</strong><br>
+                            El gr\u00e1fico muestra la <strong>envelope de capacidad</strong>
+                            (\u03c6Mnx, \u03c6Mny) para la carga axial actuante
+                            Pu = {pu:,.2f} tonf. La curva envolvente representa la
+                            <strong>frontera de interacci\u00f3n biaxial</strong>: cualquier
+                            punto dentro de la curva es v\u00e1lido; fuera de ella no.
+                            <br><br>
+                            <strong>Datos de entrada:</strong> columna de {b:.0f}\u00d7{h:.0f} cm,
+                            f'c = {fc:.0f} kgf/cm\u00b2, fy = {fy:.0f} kgf/cm\u00b2,
+                            {_n_vars} \u00d8{diam_long:.0f}/{diam_corner:.0f} mm
+                            (\u03c1 = {_rho_pct:.2f}%).
+                            <br>
+                            <strong>Demanda:</strong> Pu = {pu:,.2f} tonf,
+                            Mux = {mux:,.2f} tonf\u00b7m, Muy = {muy:,.2f} tonf\u00b7m.
+                            <br>
+                            <strong>Capacidad uniaxial:</strong>
+                            \u03c6Mnx = {mx_uni / ton:,.3f} tonf\u00b7m,
+                            \u03c6Mny = {my_uni / ton:,.3f} tonf\u00b7m.
+                        </div>
+                        """, unsafe_allow_html=True)
+
                         if ratio <= 1:
                             sobra_pct = (1 - ratio) * 100
                             st.success(
