@@ -670,7 +670,7 @@ if __name__ == "__main__":
 
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        if st.button('CALCULAR', type='primary', use_container_width=True):
+        if st.button('CALCULAR', type='primary', width='stretch'):
             st.session_state.calcular = True
             st.rerun()
 
@@ -708,7 +708,7 @@ if __name__ == "__main__":
         with st.expander('Geometr\u00eda y Propiedades de la secci\u00f3n', expanded=True):
             col1, col2 = st.columns([7, 3])
             with col1:
-                st.pyplot(plot_section(section), use_container_width=True)
+                st.pyplot(plot_section(section), width='stretch')
             with col2:
                 desc = [
                     'Area bruta de concreto',
@@ -733,7 +733,7 @@ if __name__ == "__main__":
                 st.table(data)
 
                 st.markdown('**Matriz de barras (mm)**')
-                st.dataframe(raw_matrix, use_container_width=True, hide_index=True)
+                st.dataframe(raw_matrix, width='stretch', hide_index=True)
 
         # --- Expander 2: Diagramas P-M ---
         with st.expander('Diagramas de interacci\u00f3n P\u2013M', expanded=True):
@@ -744,9 +744,9 @@ if __name__ == "__main__":
             )
             col1, col2 = st.columns(2)
             with col1:
-                st.pyplot(plot_diagram(section, 'x', pu_i, mux_i), use_container_width=True)
+                st.pyplot(plot_diagram(section, 'x', pu_i, mux_i), width='stretch')
             with col2:
-                st.pyplot(plot_diagram(section, 'y', pu_i, muy_i), use_container_width=True)
+                st.pyplot(plot_diagram(section, 'y', pu_i, muy_i), width='stretch')
 
         # --- Expander 3: Verificacion ACI 318-19 ---
         with st.expander('Verificaci\u00f3n ACI 318-19', expanded=True):
@@ -821,7 +821,7 @@ if __name__ == "__main__":
                     contour = section.contorno_aci(pu_i)
                     col1, col2 = st.columns([3, 2])
                     with col1:
-                        st.pyplot(plot_contorno_aci(contour, mux_i, muy_i), use_container_width=True)
+                        st.pyplot(plot_contorno_aci(contour, mux_i, muy_i), width='stretch')
                     with col2:
                         mx_uni = float(np.max(np.abs(contour[:, 0]))) if len(contour) else 0
                         my_uni = float(np.max(np.abs(contour[:, 1]))) if len(contour) else 0
