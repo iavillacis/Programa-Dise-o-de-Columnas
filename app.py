@@ -928,28 +928,61 @@ if __name__ == "__main__":
     </style>
     """, unsafe_allow_html=True)
 
-    st.markdown("""
+    def _img_b64(path):
+        with open(path, 'rb') as f:
+            return b64encode(f.read()).decode()
+
+    espe_b64 = _img_b64('img/ESPEtransparente.png')
+    carrera_b64 = _img_b64('img/images.jpg')
+
+    st.markdown(f"""
     <div style="
         background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 50%, #1e40af 100%);
-        padding: 1.8rem 2rem;
+        padding: 1.2rem 2rem;
         border-radius: 16px;
-        text-align: center;
         box-shadow: 0 8px 32px rgba(2,132,199,0.25);
         margin-bottom: 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
     ">
-        <h1 style="
-            color: white;
-            font-size: 2.2rem;
-            font-weight: 800;
-            margin: 0 0 0.3rem 0;
-            letter-spacing: -0.02em;
-        ">Columnas de Concreto Armado</h1>
-        <p style="
-            color: rgba(255,255,255,0.85);
-            font-size: 1rem;
-            margin: 0;
-            font-weight: 400;
-        ">Dise\u00f1o seg\u00fan ACI 318-19 \u00b7 Diagramas P\u2013M \u00b7 Verificaci\u00f3n biaxial</p>
+        <img src="data:image/png;base64,{espe_b64}"
+             style="height:70px;width:auto;object-fit:contain;filter:brightness(0)invert(1);">
+
+        <div style="text-align:center;flex:1;padding:0 1rem;">
+            <div style="color:rgba(255,255,255,0.75);font-size:0.85rem;font-weight:500;margin-bottom:0.1rem;">
+                Universidad de las Fuerzas Armadas ESPE
+            </div>
+            <div style="color:rgba(255,255,255,0.60);font-size:0.75rem;font-weight:400;margin-bottom:0.4rem;">
+                Carrera de Ingenier\u00eda Civil &middot; Hormig\u00f3n Armado
+            </div>
+            <h1 style="
+                color: white;
+                font-size: 2rem;
+                font-weight: 800;
+                margin: 0 0 0.2rem 0;
+                letter-spacing: -0.02em;
+            ">Columnas de Concreto Armado</h1>
+            <p style="
+                color: rgba(255,255,255,0.85);
+                font-size: 0.9rem;
+                margin: 0;
+                font-weight: 400;
+            ">Dise\u00f1o seg\u00fan ACI 318-19 &middot; Diagramas P\u2013M &middot; Verificaci\u00f3n biaxial</p>
+            <div style="
+                margin-top:0.5rem;
+                color:rgba(255,255,255,0.55);
+                font-size:0.8rem;
+                font-weight:400;
+                border-top:1px solid rgba(255,255,255,0.15);
+                padding-top:0.4rem;
+            ">
+                Autora: Isabela Villacis
+            </div>
+        </div>
+
+        <img src="data:image/jpeg;base64,{carrera_b64}"
+             style="height:70px;width:auto;object-fit:contain;filter:brightness(0)invert(1);">
     </div>
     """, unsafe_allow_html=True)
 
