@@ -20,7 +20,6 @@ def _plt():
             _plt_mod = sys.modules['matplotlib.pyplot']
         else:
             import matplotlib
-            matplotlib.use('Agg')
             import matplotlib.pyplot as plt
             _plt_mod = plt
     return _plt_mod
@@ -436,6 +435,8 @@ TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), 'templates', 'report.htm
 
 
 def wsgi_app(environ, start_response):
+    import matplotlib as _mpl
+    _mpl.use('Agg')
     qs = parse_qs(environ.get('QUERY_STRING', ''), keep_blank_values=True)
     if environ.get('PATH_INFO', '/') == '/health':
         body = b'{"status":"ok"}'
