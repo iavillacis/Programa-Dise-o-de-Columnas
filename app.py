@@ -316,7 +316,7 @@ def plot_contorno_aci(contour, mux, muy):
 
 
 def plot_section(section):
-    fig, ax = plt.subplots(figsize=(8, 6))
+    fig, ax = plt.subplots(figsize=(10, 8))
     ax.add_patch(plt.Rectangle((0, 0), section.b / cm, section.h / cm,
                                 fill=False, lw=3, color='#1e293b'))
     for x, y, area, dm, d in section._bars:
@@ -336,7 +336,7 @@ def plot_section(section):
 
 def fig_to_b64(fig):
     buf = BytesIO()
-    fig.savefig(buf, format='png', dpi=90, bbox_inches='tight')
+    fig.savefig(buf, format='png', dpi=85, bbox_inches='tight')
     plt.close(fig)
     return b64encode(buf.getvalue()).decode('ascii')
 
@@ -691,7 +691,7 @@ if __name__ == "__main__":
 
         # --- Expander 1: Geometria y Propiedades ---
         with st.expander('Geometr\u00eda y Propiedades de la secci\u00f3n', expanded=True):
-            col1, col2 = st.columns([3, 2])
+            col1, col2 = st.columns([7, 3])
             with col1:
                 st.pyplot(plot_section(section), use_container_width=True)
             with col2:
