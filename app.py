@@ -817,21 +817,46 @@ if __name__ == "__main__":
     st.markdown("""
     <style>
     /* ===== BOTON CALCULAR ===== */
+    @keyframes pulse-glow {{
+        0%, 100% {{ box-shadow: 0 6px 24px rgba(2,132,199,0.40); }}
+        50% {{ box-shadow: 0 8px 40px rgba(2,132,199,0.65); }}
+    }}
     div[data-testid="column"]:nth-of-type(2) .stButton button {
-        font-size: 1.4rem !important;
-        padding: 0.75rem 2rem !important;
-        font-weight: 700 !important;
-        border-radius: 10px !important;
-        background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%) !important;
+        font-size: 1.6rem !important;
+        padding: 1rem 3rem !important;
+        font-weight: 800 !important;
+        border-radius: 14px !important;
+        background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 50%, #1e40af 100%) !important;
         color: white !important;
-        box-shadow: 0 4px 14px rgba(2,132,199,0.35) !important;
+        box-shadow: 0 6px 24px rgba(2,132,199,0.40) !important;
         border: none !important;
         transition: all 0.25s ease !important;
-        letter-spacing: 0.03em;
+        letter-spacing: 0.05em;
+        cursor: pointer !important;
+        position: relative !important;
+        overflow: hidden !important;
+    }
+    div[data-testid="column"]:nth-of-type(2) .stButton button::after {
+        content: '';
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 60%);
+        opacity: 0;
+        transition: opacity 0.4s ease;
+        pointer-events: none;
     }
     div[data-testid="column"]:nth-of-type(2) .stButton button:hover {
-        box-shadow: 0 6px 24px rgba(2,132,199,0.55) !important;
-        transform: scale(1.03) !important;
+        box-shadow: 0 8px 40px rgba(2,132,199,0.65) !important;
+        transform: scale(1.05) !important;
+    }
+    div[data-testid="column"]:nth-of-type(2) .stButton button:hover::after {
+        opacity: 1;
+    }
+    div[data-testid="column"]:nth-of-type(2) .stButton button:active {
+        transform: scale(0.97) !important;
     }
 
     /* ===== EXPANDERS ===== */
@@ -936,9 +961,9 @@ if __name__ == "__main__":
     st.components.v1.html(f"""
     <div style="
         background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 50%, #1e40af 100%);
-        padding: 1.2rem 1.5rem;
-        border-radius: 16px;
-        box-shadow: 0 8px 32px rgba(2,132,199,0.25);
+        padding: 2rem 2.5rem;
+        border-radius: 18px;
+        box-shadow: 0 10px 40px rgba(2,132,199,0.30);
         margin-bottom: 1.5rem;
         display: flex;
         align-items: center;
@@ -946,32 +971,32 @@ if __name__ == "__main__":
         font-family: system-ui, -apple-system, sans-serif;
     ">
         <img src="data:image/png;base64,{_espe}"
-             style="height:65px;width:auto;object-fit:contain;filter:brightness(0)invert(1);">
+             style="height:95px;width:auto;object-fit:contain;filter:brightness(0)invert(1);">
 
-        <div style="text-align:center;flex:1;padding:0 1.5rem;">
-            <div style="color:rgba(255,255,255,0.70);font-size:0.78rem;font-weight:500;">
+        <div style="text-align:center;flex:1;padding:0 2rem;">
+            <div style="color:rgba(255,255,255,0.72);font-size:0.95rem;font-weight:500;">
                 Universidad de las Fuerzas Armadas ESPE
             </div>
-            <div style="color:rgba(255,255,255,0.55);font-size:0.70rem;margin:0.1rem 0 0.3rem 0;">
+            <div style="color:rgba(255,255,255,0.58);font-size:0.85rem;margin:0.15rem 0 0.4rem 0;">
                 Carrera de Ingenier\u00eda Civil &middot; Hormig\u00f3n Armado
             </div>
             <h1 style="
-                color:white;font-size:1.9rem;font-weight:800;
-                margin:0 0 0.15rem 0;letter-spacing:-0.02em;
+                color:white;font-size:2.4rem;font-weight:800;
+                margin:0 0 0.2rem 0;letter-spacing:-0.02em;
             ">Columnas de Concreto Armado</h1>
-            <p style="color:rgba(255,255,255,0.80);font-size:0.82rem;margin:0 0 0.3rem 0;">
+            <p style="color:rgba(255,255,255,0.82);font-size:1rem;margin:0 0 0.35rem 0;">
                 Dise\u00f1o seg\u00fan ACI 318-19 &middot; Diagramas P\u2013M &middot; Verificaci\u00f3n biaxial
             </p>
             <hr style="border:none;border-top:1px solid rgba(255,255,255,0.15);margin:0 auto;width:50%;">
-            <p style="color:rgba(255,255,255,0.50);font-size:0.72rem;margin:0.25rem 0 0 0;">
+            <p style="color:rgba(255,255,255,0.52);font-size:0.85rem;margin:0.3rem 0 0 0;">
                 Autora: Isabela Villacis
             </p>
         </div>
 
         <img src="data:image/jpeg;base64,{_carrera}"
-             style="height:65px;width:auto;object-fit:contain;filter:brightness(0)invert(1);">
+             style="height:95px;width:auto;object-fit:contain;border-radius:8px;">
     </div>
-    """, height=150)
+    """, height=220)
 
     if "calcular" not in st.session_state:
         st.session_state.calcular = False
