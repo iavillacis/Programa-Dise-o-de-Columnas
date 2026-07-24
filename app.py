@@ -497,6 +497,65 @@ def st_fig(fig):
 
 
 # =============================================================================
+# FUNCIONES DE VERIFICACION DE DEMANDA VS CAPACIDAD
+# =============================================================================
+
+# Determina si el punto de demanda (pu, mu) cae dentro de la curva de
+# diseno (phi*Pn vs phi*Mn). Devuelve (cumple, pp_at_mu) donde pp_at_mu
+# es la capacidad phi*Pn interpolada en la demanda Mu.
+# Si pu <= pp_at_mu y pu <= phi*Pn,max, la columna CUMPLE para ese eje.
+def _dentro_curva(section, eje, pu, mu):
+    _, _, pp, mp, pmax = section.curva_interaccion(eje)
+    mp = np.array(mp)
+    pp = np.array(pp)
+    mask = mp >= 0
+    mp, pp = mp[mask], pp[mask]
+    idx = np.argsort(mp)
+    mp, pp = mp[idx], pp[idx]
+    pp_at_mu = float(np.interp(abs(mu), mp, pp, left=0.0, right=0.0))
+    phi_pmax = 0.65 * pmax
+    cumple = pu <= pp_at_mu + 1e-6 and pu <= phi_pmax + 1e-6
+    return cumple, pp_at_mu, phi_pmax
+
+
+# Genera un texto explicativo detallado del resultado P-M para un eje.
+def _texto_pm(eje, pu, mu, cumple, pp_at_mu, phi_pmax, phipmax_val):
+    title = 'Mx' if eje == 'x' else 'My'
+    mu_abs = abs(mu)
+    if cumple:
+        sobra = pp_at_mu - pu
+        txt = (
+            f'**CUMPLE** \u2713 La demanda ({pu / ton:,.2f} tonf, {mu_abs / ton:,.2f} tonf\u00b7m) '
+            f'est\u00e1 **dentro** de la curva \u03c6P\u2013\u03c6{title}.\n\n'
+            f'- Capacidad \u03c6Pn a {title} = {mu_abs / ton:,.2f} tonf\u00b7m:  '
+            f'\u03c6Pn = **{pp_at_mu / ton:,.2f} tonf** \u2265 Pu = {pu / ton:,.2f} tonf  '
+            f'(sobrante {sobra / ton:,.2f} tonf).\n'
+            f'- L\u00edmite \u03c6Pn,max = {phi_pmax / ton:,.2f} tonf  \u2265 Pu.\n\n'
+            f'La columna es **adecuada** para esta combinaci\u00f3n de carga en el eje {title}.'
+        )
+    else:
+        if pu > phi_pmax + 1e-6:
+            txt = (
+                f'**FALLA** \u2717 La carga axial Pu = {pu / ton:,.2f} tonf '
+                f**EXCEDE** el l\u00edmite \u03c6Pn,max = {phi_pmax / ton:,.2f} tonf.\n\n'
+                f'Sugerencia: aumentar la secci\u00f3n (B, H), la resistencia del concreto (f\'c), '
+                f'o el acero longitudinal.'
+            )
+        else:
+            falta = pu - pp_at_mu
+            txt = (
+                f'**FALLA** \u2717 La demanda ({pu / ton:,.2f} tonf, {mu_abs / ton:,.2f} tonf\u00b7m) '
+                f'**excede** la curva \u03c6P\u2013\u03c6{title}.\n\n'
+                f'- Capacidad \u03c6Pn a {title} = {mu_abs / ton:,.2f} tonf\u00b7m:  '
+                f'\u03c6Pn = **{pp_at_mu / ton:,.2f} tonf** < Pu = {pu / ton:,.2f} tonf  '
+                f'(faltante {falta / ton:,.2f} tonf).\n\n'
+                f'Sugerencia: aumentar la secci\u00f3n (B, H), el acero longitudinal, '
+                f'o la resistencia del concreto (f\'c).'
+            )
+    return txt
+
+
+# =============================================================================
 # FUNCIONES DE MANEJO DE MATRICES
 # =============================================================================
 
@@ -824,7 +883,30 @@ if __name__ == "__main__":
     </style>
     """, unsafe_allow_html=True)
 
-    st.title('Columnas de concreto armado \u00b7 ACI 318-19')
+    st.markdown("""
+    <div style="
+        background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 50%, #1e40af 100%);
+        padding: 1.8rem 2rem;
+        border-radius: 16px;
+        text-align: center;
+        box-shadow: 0 8px 32px rgba(2,132,199,0.25);
+        margin-bottom: 1.5rem;
+    ">
+        <h1 style="
+            color: white;
+            font-size: 2.2rem;
+            font-weight: 800;
+            margin: 0 0 0.3rem 0;
+            letter-spacing: -0.02em;
+        ">Columnas de Concreto Armado</h1>
+        <p style="
+            color: rgba(255,255,255,0.85);
+            font-size: 1rem;
+            margin: 0;
+            font-weight: 400;
+        ">Dise\u00f1o seg\u00fan ACI 318-19 \u00b7 Diagramas P\u2013M \u00b7 Verificaci\u00f3n biaxial</p>
+    </div>
+    """, unsafe_allow_html=True)
 
     if "calcular" not in st.session_state:
         st.session_state.calcular = False
@@ -903,7 +985,12 @@ if __name__ == "__main__":
         # =================================================================
         # --- Expander 1: Geometria y Propiedades ---
         with st.expander('Geometr\u00eda y Propiedades de la secci\u00f3n', expanded=True):
-            st.caption(f'B = {b:.1f} cm, H = {h:.1f} cm, b·cm = {b * cm:.4f} m, h·cm = {h * cm:.4f} m, Ag = {section.ag():.6f} m\u00b2 = {section.ag() / cm**2:.2f} cm\u00b2')
+            st.caption(
+                f'Columna {b:.1f} cm \u00d7 {h:.1f} cm, recubrimiento {rec:.1f} cm, '
+                f'estribo \u00d8{tie_mm:.1f} mm, '
+                f'{n_B}\u00d7{n_H} barras (\u00d8{diam_long:.0f} long. / \u00d8{diam_corner:.0f} esq.). '
+                f'f\'c = {fc:.0f} kgf/cm\u00b2, fy = {fy:.0f} kgf/cm\u00b2.'
+            )
             data = {
                 'Propiedad': ['Ag', 'Ast', '\u03c1', 'P0 nominal', 'Pn,max nominal', '\u03c6Pn,max'],
                 'Valor': [
@@ -944,6 +1031,24 @@ if __name__ == "__main__":
             with col2:
                 st_fig(plot_diagram(section, 'y', pu_i, muy_i))
 
+            cumple_x, pp_x, pmax_x = _dentro_curva(section, 'x', pu_i, mux_i)
+            cumple_y, pp_y, pmax_y = _dentro_curva(section, 'y', pu_i, muy_i)
+            phipmax_val = 0.65 * section.pn_max() / ton
+
+            col_a, col_b = st.columns(2)
+            with col_a:
+                txt_x = _texto_pm('x', pu_i, mux_i, cumple_x, pp_x, pmax_x, phipmax_val)
+                if cumple_x:
+                    st.success(txt_x)
+                else:
+                    st.error(txt_x)
+            with col_b:
+                txt_y = _texto_pm('y', pu_i, muy_i, cumple_y, pp_y, pmax_y, phipmax_val)
+                if cumple_y:
+                    st.success(txt_y)
+                else:
+                    st.error(txt_y)
+
         # =================================================================
         # EXPANDER 3: VERIFICACION ACI 318-19
         # Revisa que la columna cumpla todos los requisitos de ACI 318-19:
@@ -958,6 +1063,12 @@ if __name__ == "__main__":
         # =================================================================
         # --- Expander 3: Verificacion ACI 318-19 ---
         with st.expander('Verificaci\u00f3n ACI 318-19', expanded=True):
+            st.caption(
+                'Revisi\u00f3n completa de los requisitos del c\u00f3digo ACI 318-19: '
+                'geometr\u00eda, acero longitudinal, cuant\u00eda m\u00ednima (1%), '
+                'estribos (Ash), zona protegida Lo, ramales, separaciones m\u00e1ximas '
+                'y espaciamiento del acero longitudinal.'
+            )
             vr = verification.verificar_columna(
                 B=b, H=h, rec=rec,
                 n_var_B=n_B, n_var_H=n_H,
@@ -1048,10 +1159,32 @@ if __name__ == "__main__":
                         ratio = radial / cap_radial if cap_radial > 0 else 999
                         st.metric('D/C radial', f'{ratio:.3f}')
                         if ratio <= 1:
-                            st.success('CUMPLE \u2014 La demanda esta dentro del contorno ACI.')
+                            sobra_pct = (1 - ratio) * 100
+                            st.success(
+                                f'**CUMPLE** \u2713 La demanda combinada (Mux, Muy) est\u00e1 '
+                                f'**dentro** del contorno ACI.\n\n'
+                                f'- \u03c6Mnx uniaxial en Pu = {mx_uni / ton:,.3f} tonf\u00b7m\n'
+                                f'- \u03c6Mny uniaxial en Pu = {my_uni / ton:,.3f} tonf\u00b7m\n'
+                                f'- Demanda radial: {radial / ton:,.3f} tonf\u00b7m  |  '
+                                f'Capacidad radial: {cap_radial / ton:,.3f} tonf\u00b7m\n'
+                                f'- Relaci\u00f3n D/C = {ratio:.3f} \u2264 1.00  '
+                                f'(sobrante {sobra_pct:.1f}% de la capacidad).'
+                            )
                         else:
-                            st.error('FALLA \u2014 La demanda excede el contorno ACI.')
-                        st.caption('D/C = distancia demanda / distancia contorno en misma direccion.')
+                            excede_pct = (ratio - 1) * 100
+                            st.error(
+                                f'**FALLA** \u2717 La demanda combinada (Mux, Muy) '
+                                f'**excede** el contorno ACI.\n\n'
+                                f'- \u03c6Mnx uniaxial en Pu = {mx_uni / ton:,.3f} tonf\u00b7m\n'
+                                f'- \u03c6Mny uniaxial en Pu = {my_uni / ton:,.3f} tonf\u00b7m\n'
+                                f'- Demanda radial: {radial / ton:,.3f} tonf\u00b7m  |  '
+                                f'Capacidad radial: {cap_radial / ton:,.3f} tonf\u00b7m\n'
+                                f'- Relaci\u00f3n D/C = {ratio:.3f} > 1.00  '
+                                f'(excede por {excede_pct:.1f}% de la capacidad).\n\n'
+                                f'Sugerencia: aumentar la secci\u00f3n (B, H), el acero '
+                                f'longitudinal, o la resistencia del concreto (f\'c).'
+                            )
+                        st.caption('D/C = distancia radial de la demanda / distancia radial del contorno en la misma direcci\u00f3n.')
                 except Exception as e:
                     st.error(f'Biaxial: {e}')
 
