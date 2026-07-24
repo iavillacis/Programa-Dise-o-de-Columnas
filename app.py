@@ -537,7 +537,7 @@ def _texto_pm(eje, pu, mu, cumple, pp_at_mu, phi_pmax, phipmax_val):
         if pu > phi_pmax + 1e-6:
             txt = (
                 f'**FALLA** \u2717 La carga axial Pu = {pu / ton:,.2f} tonf '
-                f**EXCEDE** el l\u00edmite \u03c6Pn,max = {phi_pmax / ton:,.2f} tonf.\n\n'
+                f'**EXCEDE** el l\u00edmite \u03c6Pn,max = {phi_pmax / ton:,.2f} tonf.\n\n'
                 f'Sugerencia: aumentar la secci\u00f3n (B, H), la resistencia del concreto (f\'c), '
                 f'o el acero longitudinal.'
             )
@@ -816,37 +816,61 @@ if __name__ == "__main__":
 
     st.markdown("""
     <style>
+    /* ===== BOTON CALCULAR ===== */
     div[data-testid="column"]:nth-of-type(2) .stButton button {
         font-size: 1.4rem !important;
         padding: 0.75rem 2rem !important;
         font-weight: 700 !important;
         border-radius: 10px !important;
+        background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%) !important;
+        color: white !important;
         box-shadow: 0 4px 14px rgba(2,132,199,0.35) !important;
-        border: 2px solid #0284c7 !important;
-        transition: all 0.2s ease !important;
-    }
-    div[data-testid="column"]:nth-of-type(2) .stButton button:hover {
-        box-shadow: 0 6px 20px rgba(2,132,199,0.5) !important;
-        transform: scale(1.02) !important;
-    }
-    .verif-card {
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        padding: 0.8rem 1rem;
-        text-align: center;
-    }
-    .verif-card .label {
-        font-size: 0.75rem;
-        text-transform: uppercase;
-        color: #64748b;
+        border: none !important;
+        transition: all 0.25s ease !important;
         letter-spacing: 0.03em;
     }
+    div[data-testid="column"]:nth-of-type(2) .stButton button:hover {
+        box-shadow: 0 6px 24px rgba(2,132,199,0.55) !important;
+        transform: scale(1.03) !important;
+    }
+
+    /* ===== EXPANDERS ===== */
+    .stExpander {
+        border-radius: 12px !important;
+        border: 1px solid #e2e8f0 !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04) !important;
+        margin-bottom: 0.8rem !important;
+    }
+    .stExpander:hover {
+        box-shadow: 0 4px 16px rgba(2,132,199,0.10) !important;
+    }
+
+    /* ===== METRIC CARDS (verification) ===== */
+    .verif-card {
+        background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 0.8rem 1rem;
+        text-align: center;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+        transition: all 0.2s ease;
+    }
+    .verif-card:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        transform: translateY(-1px);
+    }
+    .verif-card .label {
+        font-size: 0.70rem;
+        text-transform: uppercase;
+        color: #64748b;
+        letter-spacing: 0.04em;
+        font-weight: 600;
+    }
     .verif-card .value {
-        font-size: 1.1rem;
-        font-weight: 700;
+        font-size: 1.15rem;
+        font-weight: 800;
         color: #0f172a;
-        margin-top: 0.1rem;
+        margin-top: 0.15rem;
     }
     .verif-card .status-pass {
         color: #16a34a;
@@ -858,6 +882,8 @@ if __name__ == "__main__":
         font-weight: 700;
         font-size: 0.85rem;
     }
+
+    /* ===== MATRIX TABLE ===== */
     .matrix-table {
         border-collapse: collapse;
         margin: 0 auto;
@@ -877,6 +903,25 @@ if __name__ == "__main__":
     .matrix-table td.interior {
         background: #fefce8;
     }
+
+    /* ===== SIDEBAR ===== */
+    section[data-testid="stSidebar"] .stNumberInput label {
+        font-weight: 600 !important;
+        font-size: 0.85rem !important;
+    }
+
+    /* ===== TABLES (st.table) ===== */
+    div[data-testid="stTable"] table {
+        border-radius: 8px !important;
+        overflow: hidden !important;
+    }
+    div[data-testid="stTable"] thead th {
+        background: #f1f5f9 !important;
+        font-weight: 700 !important;
+        color: #0f172a !important;
+    }
+
+    /* ===== STREAMLIT DEFAULT FIXES ===== */
     .st-emotion-cache-1r4qj8v {
         font-size: 1rem;
     }
