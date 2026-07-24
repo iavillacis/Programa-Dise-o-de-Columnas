@@ -1,7 +1,4 @@
 import numpy as np
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 import pandas as pd
 from io import BytesIO
 from base64 import b64encode
@@ -11,8 +8,23 @@ from string import Template
 import warnings
 import os
 import gc
+import sys
 
 import verification
+
+_plt_mod = None
+
+def _plt():
+    global _plt_mod
+    if _plt_mod is None:
+        if 'matplotlib.pyplot' in sys.modules:
+            _plt_mod = sys.modules['matplotlib.pyplot']
+        else:
+            import matplotlib
+            matplotlib.use('Agg')
+            import matplotlib.pyplot as plt
+            _plt_mod = plt
+    return _plt_mod
 
 m = 1.0
 cm = 0.01 * m
@@ -276,7 +288,7 @@ class DiagramaInteraccion:
 
 def plot_diagram(section, eje, pu, mu):
     pn, mn, pp, mp, pmax = section.curva_interaccion(eje)
-    fig, ax = plt.subplots(figsize=(7, 5.2))
+    fig, ax = _plt().subplots(figsize=(7, 5.2))
     mn_neg = [-x for x in mn]
     mp_neg = [-x for x in mp]
     ax.plot([x / ton for x in mn], [x / ton for x in pn], 'k--', lw=1.5, label='Nominal')
@@ -299,7 +311,7 @@ def plot_diagram(section, eje, pu, mu):
 
 def plot_contorno_aci(contour, mux, muy):
     closed = np.vstack((contour, contour[:1]))
-    fig, ax = plt.subplots(figsize=(6.5, 5.5))
+    fig, ax = _plt().subplots(figsize=(6.5, 5.5))
     ax.fill(closed[:, 0] / ton, closed[:, 1] / ton, color='#bae6fd', alpha=0.55, label='Region resistente')
     ax.plot(closed[:, 0] / ton, closed[:, 1] / ton, color='#0284c7', lw=2, label='Contorno ACI \u03c6P = Pu')
     ax.scatter([mux / ton], [muy / ton], color='red', s=52, zorder=5, label='Demanda')
@@ -316,12 +328,13 @@ def plot_contorno_aci(contour, mux, muy):
 
 
 def plot_section(section):
-    fig, ax = plt.subplots(figsize=(10, 8))
-    ax.add_patch(plt.Rectangle((0, 0), section.b / cm, section.h / cm,
+    _p = _plt()
+    fig, ax = _p.subplots(figsize=(10, 8))
+    ax.add_patch(_p.Rectangle((0, 0), section.b / cm, section.h / cm,
                                 fill=False, lw=3, color='#1e293b'))
     for x, y, area, dm, d in section._bars:
         r = d / (2 * cm)
-        ax.add_patch(plt.Circle((x / cm, y / cm), r, color='#b91c1c', alpha=0.85))
+        ax.add_patch(_p.Circle((x / cm, y / cm), r, color='#b91c1c', alpha=0.85))
         ax.text(x / cm, y / cm, f'{dm:.1f}', color='white',
                 ha='center', va='center', fontsize=9, fontweight='bold')
     ax.set_aspect('equal')
@@ -337,7 +350,7 @@ def plot_section(section):
 def fig_to_b64(fig):
     buf = BytesIO()
     fig.savefig(buf, format='png', dpi=85, bbox_inches='tight')
-    plt.close(fig)
+    _plt().close(fig)
     return b64encode(buf.getvalue()).decode('ascii')
 
 
@@ -537,7 +550,7 @@ def app(environ, start_response):
         )
     except Exception as e:
         html = f'<p class="error">Error: {escape(str(e))}</p>'
-    plt.close('all')
+    _plt().close('all')
     gc.collect()
     body = html.encode('utf-8')
     start_response('200 OK', [('Content-Type', 'text/html; charset=utf-8')])
@@ -546,6 +559,8 @@ def app(environ, start_response):
 
 if __name__ == "__main__":
     import streamlit as st
+
+    _plt()
 
     st.set_page_config(page_title='Columnas ACI 318-19', page_icon='\U0001f3d7\ufe0f', layout='wide')
 
