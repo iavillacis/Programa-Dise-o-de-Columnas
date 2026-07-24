@@ -5,6 +5,11 @@ __pycache__/
 .venv/
 venv/
 
+# Node (generado por Railway local)
+node_modules/
+package.json
+package-lock.json
+
 # Streamlit local settings and secrets
 .streamlit/secrets.toml
 
