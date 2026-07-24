@@ -435,7 +435,7 @@ def _verif_to_html(vr):
 TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), 'templates', 'report.html')
 
 
-def app(environ, start_response):
+def wsgi_app(environ, start_response):
     qs = parse_qs(environ.get('QUERY_STRING', ''), keep_blank_values=True)
     if environ.get('PATH_INFO', '/') == '/health':
         body = b'{"status":"ok"}'
