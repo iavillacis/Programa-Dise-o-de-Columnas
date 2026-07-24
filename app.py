@@ -22,6 +22,11 @@ def _plt():
             import matplotlib
             import matplotlib.pyplot as plt
             _plt_mod = plt
+            try:
+                from PIL import Image
+                Image.MAX_IMAGE_PIXELS = None
+            except ImportError:
+                pass
     return _plt_mod
 
 m = 1.0
@@ -350,6 +355,17 @@ def fig_to_b64(fig):
     fig.savefig(buf, format='png', dpi=85, bbox_inches='tight')
     _plt().close(fig)
     return b64encode(buf.getvalue()).decode('ascii')
+
+
+def st_fig(fig):
+    from PIL import Image as _PIL
+    _PIL.MAX_IMAGE_PIXELS = None
+    fig.set_dpi(85)
+    buf = BytesIO()
+    fig.savefig(buf, format='png', dpi=85, bbox_inches='tight')
+    buf.seek(0)
+    st.image(buf, width='stretch')
+    _plt().close(fig)
 
 
 def generar_matriz_barras(n_B, n_H, diam_long, diam_corner):
@@ -708,7 +724,7 @@ if __name__ == "__main__":
         with st.expander('Geometr\u00eda y Propiedades de la secci\u00f3n', expanded=True):
             col1, col2 = st.columns([7, 3])
             with col1:
-                st.pyplot(plot_section(section), width='stretch')
+                st_fig(plot_section(section))
             with col2:
                 desc = [
                     'Area bruta de concreto',
@@ -744,9 +760,9 @@ if __name__ == "__main__":
             )
             col1, col2 = st.columns(2)
             with col1:
-                st.pyplot(plot_diagram(section, 'x', pu_i, mux_i), width='stretch')
+                st_fig(plot_diagram(section, 'x', pu_i, mux_i))
             with col2:
-                st.pyplot(plot_diagram(section, 'y', pu_i, muy_i), width='stretch')
+                st_fig(plot_diagram(section, 'y', pu_i, muy_i))
 
         # --- Expander 3: Verificacion ACI 318-19 ---
         with st.expander('Verificaci\u00f3n ACI 318-19', expanded=True):
@@ -821,7 +837,7 @@ if __name__ == "__main__":
                     contour = section.contorno_aci(pu_i)
                     col1, col2 = st.columns([3, 2])
                     with col1:
-                        st.pyplot(plot_contorno_aci(contour, mux_i, muy_i), width='stretch')
+                        st_fig(plot_contorno_aci(contour, mux_i, muy_i))
                     with col2:
                         mx_uni = float(np.max(np.abs(contour[:, 0]))) if len(contour) else 0
                         my_uni = float(np.max(np.abs(contour[:, 1]))) if len(contour) else 0
