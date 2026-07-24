@@ -905,6 +905,7 @@ if __name__ == "__main__":
         # =================================================================
         # --- Expander 1: Geometria y Propiedades ---
         with st.expander('Geometr\u00eda y Propiedades de la secci\u00f3n', expanded=True):
+            st.caption(f'B = {b:.1f} cm, H = {h:.1f} cm, b·cm = {b * cm:.4f} m, h·cm = {h * cm:.4f} m, Ag = {section.ag():.6f} m\u00b2 = {section.ag() / cm**2:.2f} cm\u00b2')
             data = {
                 'Propiedad': ['Ag', 'Ast', '\u03c1', 'P0 nominal', 'Pn,max nominal', '\u03c6Pn,max'],
                 'Valor': [
