@@ -172,7 +172,7 @@ class DiagramaInteraccion:
             bars.sort(key=lambda b: b[0])
             for (x1, d1), (x2, d2) in zip(bars, bars[1:]):
                 libre = (x2 - x1) - (d1 + d2) / 2
-                if libre < 2.5 * cm:
+                if round(libre, 12) < 2.5 * cm:
                     mensajes.append(
                         f"Esp. libre horiz. = {libre / cm:.2f} cm en fila y={yk / cm:.1f} cm; minimo ACI = 2.50 cm"
                     )
@@ -185,7 +185,7 @@ class DiagramaInteraccion:
             bars.sort(key=lambda b: b[0])
             for (y1, d1), (y2, d2) in zip(bars, bars[1:]):
                 libre = (y2 - y1) - (d1 + d2) / 2
-                if libre < 2.5 * cm:
+                if round(libre, 12) < 2.5 * cm:
                     mensajes.append(
                         f"Esp. libre vertical = {libre / cm:.2f} cm en columna x={xk / cm:.1f} cm; minimo ACI = 2.50 cm"
                     )
@@ -888,8 +888,6 @@ if __name__ == "__main__":
             if rho_val < 0.01:
                 st.warning(f'Cuantia {rho_val:.2%}: menor al 1% minimo (ACI 318-19).')
 
-            if esp_msgs:
-                st.stop()
         except Exception as e:
             st.error(f'Error en datos: {e}')
             st.stop()
