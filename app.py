@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 from io import BytesIO
 from base64 import b64encode
 from html import escape
@@ -730,12 +729,10 @@ if __name__ == "__main__":
                     ],
                     'Descripcion': desc,
                 }
-                st.table(pd.DataFrame(data))
+                st.table(data)
 
                 st.markdown('**Matriz de barras (mm)**')
-                df_mat = pd.DataFrame(raw_matrix,
-                                      columns=[f'C{j+1}' for j in range(raw_matrix.shape[1])])
-                st.dataframe(df_mat, use_container_width=True, hide_index=True)
+                st.dataframe(raw_matrix, use_container_width=True, hide_index=True)
 
         # --- Expander 2: Diagramas P-M ---
         with st.expander('Diagramas de interacci\u00f3n P\u2013M', expanded=True):
