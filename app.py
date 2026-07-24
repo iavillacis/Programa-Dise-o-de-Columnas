@@ -928,63 +928,50 @@ if __name__ == "__main__":
     </style>
     """, unsafe_allow_html=True)
 
-    def _img_b64(path):
-        with open(path, 'rb') as f:
-            return b64encode(f.read()).decode()
-
-    espe_b64 = _img_b64('img/ESPEtransparente.png')
-    carrera_b64 = _img_b64('img/images.jpg')
-
-    st.markdown(f"""
+    from base64 import b64encode as _b64
+    with open('img/ESPEtransparente.png', 'rb') as _f:
+        _espe = _b64(_f.read()).decode()
+    with open('img/images.jpg', 'rb') as _f:
+        _carrera = _b64(_f.read()).decode()
+    st.components.v1.html(f"""
     <div style="
         background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 50%, #1e40af 100%);
-        padding: 1.2rem 2rem;
+        padding: 1.2rem 1.5rem;
         border-radius: 16px;
         box-shadow: 0 8px 32px rgba(2,132,199,0.25);
         margin-bottom: 1.5rem;
         display: flex;
         align-items: center;
         justify-content: space-between;
+        font-family: system-ui, -apple-system, sans-serif;
     ">
-        <img src="data:image/png;base64,{espe_b64}"
-             style="height:70px;width:auto;object-fit:contain;filter:brightness(0)invert(1);">
+        <img src="data:image/png;base64,{_espe}"
+             style="height:65px;width:auto;object-fit:contain;filter:brightness(0)invert(1);">
 
-        <div style="text-align:center;flex:1;padding:0 1rem;">
-            <div style="color:rgba(255,255,255,0.75);font-size:0.85rem;font-weight:500;margin-bottom:0.1rem;">
+        <div style="text-align:center;flex:1;padding:0 1.5rem;">
+            <div style="color:rgba(255,255,255,0.70);font-size:0.78rem;font-weight:500;">
                 Universidad de las Fuerzas Armadas ESPE
             </div>
-            <div style="color:rgba(255,255,255,0.60);font-size:0.75rem;font-weight:400;margin-bottom:0.4rem;">
+            <div style="color:rgba(255,255,255,0.55);font-size:0.70rem;margin:0.1rem 0 0.3rem 0;">
                 Carrera de Ingenier\u00eda Civil &middot; Hormig\u00f3n Armado
             </div>
             <h1 style="
-                color: white;
-                font-size: 2rem;
-                font-weight: 800;
-                margin: 0 0 0.2rem 0;
-                letter-spacing: -0.02em;
+                color:white;font-size:1.9rem;font-weight:800;
+                margin:0 0 0.15rem 0;letter-spacing:-0.02em;
             ">Columnas de Concreto Armado</h1>
-            <p style="
-                color: rgba(255,255,255,0.85);
-                font-size: 0.9rem;
-                margin: 0;
-                font-weight: 400;
-            ">Dise\u00f1o seg\u00fan ACI 318-19 &middot; Diagramas P\u2013M &middot; Verificaci\u00f3n biaxial</p>
-            <div style="
-                margin-top:0.5rem;
-                color:rgba(255,255,255,0.55);
-                font-size:0.8rem;
-                font-weight:400;
-                border-top:1px solid rgba(255,255,255,0.15);
-                padding-top:0.4rem;
-            ">
+            <p style="color:rgba(255,255,255,0.80);font-size:0.82rem;margin:0 0 0.3rem 0;">
+                Dise\u00f1o seg\u00fan ACI 318-19 &middot; Diagramas P\u2013M &middot; Verificaci\u00f3n biaxial
+            </p>
+            <hr style="border:none;border-top:1px solid rgba(255,255,255,0.15);margin:0 auto;width:50%;">
+            <p style="color:rgba(255,255,255,0.50);font-size:0.72rem;margin:0.25rem 0 0 0;">
                 Autora: Isabela Villacis
-            </div>
+            </p>
         </div>
 
-        <img src="data:image/jpeg;base64,{carrera_b64}"
-             style="height:70px;width:auto;object-fit:contain;filter:brightness(0)invert(1);">
+        <img src="data:image/jpeg;base64,{_carrera}"
+             style="height:65px;width:auto;object-fit:contain;filter:brightness(0)invert(1);">
     </div>
-    """, unsafe_allow_html=True)
+    """, height=150)
 
     if "calcular" not in st.session_state:
         st.session_state.calcular = False
