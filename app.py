@@ -980,27 +980,27 @@ if __name__ == "__main__":
         display: flex;
         align-items: center;
         justify-content: space-between;
-        font-family: system-ui, -apple-system, sans-serif;
+        font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
     ">
         <img src="data:image/png;base64,{_espe}"
              style="height:95px;width:auto;object-fit:contain;border-radius:8px;">
 
         <div style="text-align:center;flex:1;padding:0 2rem;">
-            <div style="color:rgba(255,255,255,0.72);font-size:0.95rem;font-weight:500;">
+            <div style="color:rgba(255,255,255,0.72);font-size:0.95rem;font-weight:500;line-height:1.3;">
                 Universidad de las Fuerzas Armadas ESPE
             </div>
-            <div style="color:rgba(255,255,255,0.58);font-size:0.85rem;margin:0.15rem 0 0.4rem 0;">
+            <div style="color:rgba(255,255,255,0.58);font-size:0.85rem;margin:0.15rem 0 0.4rem 0;line-height:1.3;">
                 Carrera de Ingenier\u00eda Civil &middot; Hormig\u00f3n Armado
             </div>
             <h1 style="
                 color:white;font-size:2.4rem;font-weight:800;
-                margin:0 0 0.2rem 0;letter-spacing:-0.02em;
+                margin:0 0 0.2rem 0;letter-spacing:-0.02em;line-height:1.2;
             ">Columnas de Concreto Armado</h1>
-            <p style="color:rgba(255,255,255,0.82);font-size:1rem;margin:0 0 0.35rem 0;">
+            <p style="color:rgba(255,255,255,0.82);font-size:1rem;margin:0 0 0.35rem 0;line-height:1.3;">
                 Dise\u00f1o seg\u00fan ACI 318-19 &middot; Diagramas P\u2013M &middot; Verificaci\u00f3n biaxial
             </p>
             <hr style="border:none;border-top:1px solid rgba(255,255,255,0.15);margin:0 auto;width:50%;">
-            <p style="color:rgba(255,255,255,0.52);font-size:0.85rem;margin:0.3rem 0 0 0;">
+            <p style="color:rgba(255,255,255,0.55);font-size:0.90rem;margin:0.4rem 0 0 0;font-weight:500;line-height:1.3;">
                 Autora: Isabela Villacis
             </p>
         </div>
@@ -1008,7 +1008,7 @@ if __name__ == "__main__":
         <img src="data:image/jpeg;base64,{_carrera}"
              style="height:95px;width:auto;object-fit:contain;border-radius:8px;">
     </div>
-    """, height=220)
+    """, height=300)
 
     if "calcular" not in st.session_state:
         st.session_state.calcular = False
