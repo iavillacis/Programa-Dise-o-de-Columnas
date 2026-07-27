@@ -1020,29 +1020,11 @@ if __name__ == "__main__":
         mux = st.number_input('Mux (tonf\u00b7m)', min_value=0.0, value=12.0, step=1.0)
         muy = st.number_input('Muy (tonf\u00b7m)', min_value=0.0, value=6.0, step=1.0)
 
-    col1, col2, col3 = st.columns([1, 2, 1])
+    col1, col2 = st.columns([3, 1])
     with col2:
         if st.button('CALCULAR', type='primary', key='calcular_btn'):
             st.session_state.calcular = True
             st.rerun()
-    st.markdown("""
-    <style>
-    div[data-testid="stButton"] {
-        text-align: center !important;
-    }
-    button[kind="primary"] {
-        font-size: 2rem !important;
-        padding: 1.5rem 5rem !important;
-        font-weight: 900 !important;
-        border-radius: 20px !important;
-        background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 40%, #1e40af 100%) !important;
-        color: white !important;
-        border: 2px solid rgba(255,255,255,0.25) !important;
-        cursor: pointer !important;
-        letter-spacing: 0.1em;
-    }
-    </style>
-    """, unsafe_allow_html=True)
 
     if st.session_state.calcular:
         try:
