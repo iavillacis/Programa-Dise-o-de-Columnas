@@ -519,36 +519,48 @@ def _dentro_curva(section, eje, pu, mu):
 
 
 # Genera un texto explicativo detallado del resultado P-M para un eje.
+# Incluye D/C (Pu / phi*Pn) y localizacion del punto de demanda respecto
+# a la curva (dentro/fuera, arriba/abajo).
 def _texto_pm(eje, pu, mu, cumple, pp_at_mu, phi_pmax, phipmax_val):
     title = 'Mx' if eje == 'x' else 'My'
     mu_abs = abs(mu)
     if cumple:
         sobra = pp_at_mu - pu
+        ratio_pm = pu / pp_at_mu if pp_at_mu > 0 else 999
         txt = (
             f'**CUMPLE** \u2713 La demanda ({pu / ton:,.2f} tonf, {mu_abs / ton:,.2f} tonf\u00b7m) '
             f'est\u00e1 **dentro** de la curva \u03c6P\u2013\u03c6{title}.\n\n'
+            f'- El punto rojo (Pu, Mu) se ubica **por debajo** de la curva de dise\u00f1o '
+            f'(azul), en la zona segura de la secci\u00f3n.\n'
             f'- Capacidad \u03c6Pn a {title} = {mu_abs / ton:,.2f} tonf\u00b7m:  '
             f'\u03c6Pn = **{pp_at_mu / ton:,.2f} tonf** \u2265 Pu = {pu / ton:,.2f} tonf  '
             f'(sobrante {sobra / ton:,.2f} tonf).\n'
             f'- L\u00edmite \u03c6Pn,max = {phi_pmax / ton:,.2f} tonf  \u2265 Pu.\n\n'
-            f'La columna es **adecuada** para esta combinaci\u00f3n de carga en el eje {title}.'
+            f'D/C = {ratio_pm:.3f} \u2264 1.00  |  '
+            f'La columna es **adecuada** para esta combinaci\u00f3n en el eje {title}.'
         )
     else:
         if pu > phi_pmax + 1e-6:
             txt = (
                 f'**FALLA** \u2717 La carga axial Pu = {pu / ton:,.2f} tonf '
                 f'**EXCEDE** el l\u00edmite \u03c6Pn,max = {phi_pmax / ton:,.2f} tonf.\n\n'
+                f'- El punto de demanda est\u00e1 **por encima** de la l\u00ednea naranja '
+                f'\u03c6Pn,max, en zona de falla por compresi\u00f3n pura.\n\n'
                 f'Sugerencia: aumentar la secci\u00f3n (B, H), la resistencia del concreto (f\'c), '
                 f'o el acero longitudinal.'
             )
         else:
             falta = pu - pp_at_mu
+            ratio_pm = pu / pp_at_mu if pp_at_mu > 0 else 999
             txt = (
                 f'**FALLA** \u2717 La demanda ({pu / ton:,.2f} tonf, {mu_abs / ton:,.2f} tonf\u00b7m) '
                 f'**excede** la curva \u03c6P\u2013\u03c6{title}.\n\n'
+                f'- El punto rojo est\u00e1 **fuera** de la curva de dise\u00f1o, '
+                f'en zona de falla por combinaci\u00f3n carga axial\u2013momento.\n'
                 f'- Capacidad \u03c6Pn a {title} = {mu_abs / ton:,.2f} tonf\u00b7m:  '
                 f'\u03c6Pn = **{pp_at_mu / ton:,.2f} tonf** < Pu = {pu / ton:,.2f} tonf  '
                 f'(faltante {falta / ton:,.2f} tonf).\n\n'
+                f'D/C = {ratio_pm:.3f} > 1.00  |  '
                 f'Sugerencia: aumentar la secci\u00f3n (B, H), el acero longitudinal, '
                 f'o la resistencia del concreto (f\'c).'
             )
@@ -1125,7 +1137,9 @@ if __name__ == "__main__":
             st.caption(
                 'Curva nominal (negro discontinuo) y reducida por \u03c6 (azul). '
                 'Linea naranja = \u03c6Pn,max (limite ACI 318-19). '
-                'Punto rojo = demanda (Pu, Mu).'
+                'Punto rojo = demanda (Pu, Mu). '
+                'Si el punto rojo est\u00e1 dentro del \u00e1rea azul (por debajo de la '
+                'curva \u03c6P\u2013\u03c6M), la columna CUMPLE para ese eje.'
             )
             col1, col2 = st.columns(2)
             with col1:
@@ -1256,9 +1270,29 @@ if __name__ == "__main__":
                         my_uni = float(np.max(np.abs(contour[:, 1]))) if len(contour) else 0
                         st.metric('\u03c6Mnx (uniaxial en Pu)', f'{mx_uni / ton:,.3f} tonf\u00b7m')
                         st.metric('\u03c6Mny (uniaxial en Pu)', f'{my_uni / ton:,.3f} tonf\u00b7m')
+
                         radial = np.hypot(mux_i, muy_i)
-                        cap_radial = np.hypot(mx_uni, my_uni)
-                        ratio = radial / cap_radial if cap_radial > 0 else 999
+                        theta = np.arctan2(muy_i, mux_i)
+                        dx, dy = np.cos(theta), np.sin(theta)
+                        contour_c = np.vstack([contour, contour[:1]])
+                        cap_radial = None
+                        for i in range(len(contour_c) - 1):
+                            x1, y1 = contour_c[i]
+                            x2, y2 = contour_c[i + 1]
+                            ex, ey = x2 - x1, y2 - y1
+                            det = -ex * dy + ey * dx
+                            if abs(det) < 1e-12:
+                                continue
+                            s = (-x1 * dy + y1 * dx) / det
+                            t = (-x1 * ey + y1 * ex) / det
+                            if 0 <= s <= 1 and t >= 0:
+                                r = abs(t)
+                                if cap_radial is None or r < cap_radial:
+                                    cap_radial = r
+                        if cap_radial is None or cap_radial < 1e-12:
+                            ratio = 999
+                        else:
+                            ratio = radial / cap_radial
                         st.metric('D/C radial', f'{ratio:.3f}')
 
                         _n_vars = n_B * n_H
