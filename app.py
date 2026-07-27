@@ -829,24 +829,41 @@ if __name__ == "__main__":
     st.markdown("""
     <style>
     /* ===== BOTON CALCULAR ===== */
-    @keyframes pulse-glow {{
-        0%, 100% {{ box-shadow: 0 6px 24px rgba(2,132,199,0.40); }}
-        50% {{ box-shadow: 0 8px 40px rgba(2,132,199,0.65); }}
-    }}
+    @keyframes pulse-glow {
+        0%, 100% { box-shadow: 0 0 20px rgba(2,132,199,0.30), 0 6px 24px rgba(2,132,199,0.25); }
+        50% { box-shadow: 0 0 40px rgba(2,132,199,0.55), 0 8px 40px rgba(2,132,199,0.40); }
+    }
+    @keyframes shimmer {
+        0% { transform: translateX(-100%) skewX(-15deg); }
+        100% { transform: translateX(300%) skewX(-15deg); }
+    }
     div[data-testid="column"]:nth-of-type(2) .stButton button {
         font-size: 1.6rem !important;
-        padding: 1rem 3rem !important;
+        padding: 1.1rem 3.5rem !important;
         font-weight: 800 !important;
-        border-radius: 14px !important;
+        border-radius: 16px !important;
         background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 50%, #1e40af 100%) !important;
         color: white !important;
-        box-shadow: 0 6px 24px rgba(2,132,199,0.40) !important;
-        border: none !important;
-        transition: all 0.25s ease !important;
-        letter-spacing: 0.05em;
+        box-shadow: 0 0 20px rgba(2,132,199,0.30), 0 6px 24px rgba(2,132,199,0.25) !important;
+        border: 1px solid rgba(255,255,255,0.15) !important;
+        transition: all 0.3s ease !important;
+        letter-spacing: 0.06em;
         cursor: pointer !important;
         position: relative !important;
         overflow: hidden !important;
+        animation: pulse-glow 2.5s ease-in-out infinite !important;
+        backdrop-filter: blur(4px);
+    }
+    div[data-testid="column"]:nth-of-type(2) .stButton button::before {
+        content: '';
+        position: absolute;
+        top: 0; left: -100%;
+        width: 60%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.20), transparent);
+        transform: skewX(-15deg);
+        animation: shimmer 3s ease-in-out infinite;
+        pointer-events: none;
     }
     div[data-testid="column"]:nth-of-type(2) .stButton button::after {
         content: '';
@@ -855,20 +872,22 @@ if __name__ == "__main__":
         left: -50%;
         width: 200%;
         height: 200%;
-        background: radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 60%);
+        background: radial-gradient(circle at var(--mx, 50%) var(--my, 50%), rgba(255,255,255,0.12) 0%, transparent 60%);
         opacity: 0;
         transition: opacity 0.4s ease;
         pointer-events: none;
     }
     div[data-testid="column"]:nth-of-type(2) .stButton button:hover {
-        box-shadow: 0 8px 40px rgba(2,132,199,0.65) !important;
-        transform: scale(1.05) !important;
+        box-shadow: 0 0 60px rgba(2,132,199,0.60), 0 8px 40px rgba(2,132,199,0.45) !important;
+        transform: scale(1.06) !important;
+        border-color: rgba(255,255,255,0.30) !important;
     }
     div[data-testid="column"]:nth-of-type(2) .stButton button:hover::after {
         opacity: 1;
     }
     div[data-testid="column"]:nth-of-type(2) .stButton button:active {
-        transform: scale(0.97) !important;
+        transform: scale(0.96) !important;
+        box-shadow: 0 0 30px rgba(2,132,199,0.40), 0 4px 16px rgba(2,132,199,0.30) !important;
     }
 
     /* ===== EXPANDERS ===== */
@@ -1029,8 +1048,9 @@ if __name__ == "__main__":
         </div>
         """, unsafe_allow_html=True)
 
-        # ---- SECCION: GEOMETRIA DE LA COLUMNA ----
-        st.subheader('Geometr\u00eda')
+        st.markdown("""<hr style="margin:0.2rem 0 0.6rem 0;border-color:#e2e8f0;">""", unsafe_allow_html=True)
+
+        st.markdown("<span style='font-size:1.05rem;font-weight:700;color:#0f172a;'>\U0001f3d7\ufe0f Geometr\u00eda</span>", unsafe_allow_html=True)
         b = st.number_input('B (cm)', min_value=10.0, value=40.0, step=1.0)
         h = st.number_input('H (cm)', min_value=10.0, value=40.0, step=1.0)
         rec = st.number_input('Rec. r (cm)', min_value=1.0, value=4.0, step=0.5)
@@ -1039,12 +1059,14 @@ if __name__ == "__main__":
         L = st.number_input('L (cm) - Longitud libre columna', min_value=100.0, value=300.0, step=10.0)
         s_estribo = st.number_input('s (cm) - Separacion estribos propuesta', min_value=1.0, value=10.0, step=0.5)
 
-        st.subheader('Materiales')
+        st.markdown("""<hr style="margin:0.6rem 0;border-color:#e2e8f0;">""", unsafe_allow_html=True)
+        st.markdown("<span style='font-size:1.05rem;font-weight:700;color:#0f172a;'>\U0001f52c Materiales</span>", unsafe_allow_html=True)
         fc = st.number_input("f'c (kgf/cm\u00b2)", min_value=100.0, value=280.0, step=10.0)
         fy = st.number_input('fy (kgf/cm\u00b2)', min_value=2000.0, value=4200.0, step=100.0)
 
-        st.subheader('Armado longitudinal')
-        st.caption('Las esquinas usan el diametro de esquina; el resto usa el diametro longitudinal.')
+        st.markdown("""<hr style="margin:0.6rem 0;border-color:#e2e8f0;">""", unsafe_allow_html=True)
+        st.markdown("<span style='font-size:1.05rem;font-weight:700;color:#0f172a;'>\U0001f4cb Armado longitudinal</span>", unsafe_allow_html=True)
+        st.caption('Esquinas usan \u00d8esquina; el resto \u00d8longitudinal.')
         col_a, col_b = st.columns(2)
         with col_a:
             n_B = st.number_input('N\u00b0 varillas en B', min_value=2, max_value=12, value=4, step=1)
@@ -1053,10 +1075,12 @@ if __name__ == "__main__":
         diam_long = st.number_input('\u00d8 acero longitudinal (mm)', min_value=6.0, max_value=50.0, value=22.0, step=1.0)
         diam_corner = st.number_input('\u00d8 acero esquinas (mm)', min_value=6.0, max_value=50.0, value=25.0, step=1.0)
 
-        st.subheader('Demandas')
-        pu = st.number_input('Pu (tonf)', min_value=0.0, value=300.0, step=5.0)
-        mux = st.number_input('Mux (tonf\u00b7m)', min_value=0.0, value=25.0, step=1.0)
-        muy = st.number_input('Muy (tonf\u00b7m)', min_value=0.0, value=15.0, step=1.0)
+        st.markdown("""<hr style="margin:0.6rem 0;border-color:#e2e8f0;">""", unsafe_allow_html=True)
+        st.markdown("<span style='font-size:1.05rem;font-weight:700;color:#0f172a;'>\U0001f4ca Demandas</span>", unsafe_allow_html=True)
+        st.caption('Valores que cumplen todos los criterios ACI con los par\u00e1metros por defecto.')
+        pu = st.number_input('Pu (tonf)', min_value=0.0, value=120.0, step=5.0)
+        mux = st.number_input('Mux (tonf\u00b7m)', min_value=0.0, value=12.0, step=1.0)
+        muy = st.number_input('Muy (tonf\u00b7m)', min_value=0.0, value=6.0, step=1.0)
 
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
