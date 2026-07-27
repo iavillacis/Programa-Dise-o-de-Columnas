@@ -1034,25 +1034,24 @@ if __name__ == "__main__":
         100% { transform: translateX(400%) skewX(-20deg); }
     }
     div[data-testid="stButton"] {
-        width: 80% !important;
-        margin-left: 20% !important;
+        text-align: center !important;
     }
-    button[kind="primary"] {
+    button[data-testid="stBaseButton-primary"] {
         font-size: 3rem !important;
-        padding: 3rem 1rem !important;
+        padding: 3rem 2rem !important;
         font-weight: 900 !important;
         border-radius: 24px !important;
         background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 40%, #1e40af 100%) !important;
         color: white !important;
         border: 4px solid rgba(255,255,255,0.35) !important;
         cursor: pointer !important;
-        width: 100%;
+        width: 85%;
         position: relative !important;
         overflow: hidden !important;
         animation: glow 2.5s ease-in-out infinite !important;
         text-shadow: 0 2px 10px rgba(0,0,0,0.20);
     }
-    button[kind="primary"]::before {
+    button[data-testid="stBaseButton-primary"]::before {
         content: '';
         position: absolute;
         top: 0; left: -150%;
@@ -1063,12 +1062,12 @@ if __name__ == "__main__":
         animation: sweep 3s ease-in-out infinite;
         pointer-events: none;
     }
-    button[kind="primary"]:hover {
+    button[data-testid="stBaseButton-primary"]:hover {
         box-shadow: 0 0 80px rgba(2,132,199,0.70), 0 16px 60px rgba(2,132,199,0.45) !important;
         transform: scale(1.06) !important;
         border-color: rgba(255,255,255,0.50) !important;
     }
-    button[kind="primary"]:active {
+    button[data-testid="stBaseButton-primary"]:active {
         transform: scale(0.94) !important;
     }
     </style>
