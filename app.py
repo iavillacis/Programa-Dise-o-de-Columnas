@@ -1347,32 +1347,34 @@ if __name__ == "__main__":
                         </div>
                         """, unsafe_allow_html=True)
 
-                        if ratio <= 1:
-                            sobra_pct = (1 - ratio) * 100
-                            st.success(
-                                f'**CUMPLE** \u2713 La demanda combinada (Mux, Muy) est\u00e1 '
-                                f'**dentro** del contorno ACI.\n\n'
-                                f'- \u03c6Mnx uniaxial en Pu = {mx_uni / ton:,.3f} tonf\u00b7m\n'
-                                f'- \u03c6Mny uniaxial en Pu = {my_uni / ton:,.3f} tonf\u00b7m\n'
-                                f'- Demanda radial: {radial / ton:,.3f} tonf\u00b7m  |  '
-                                f'Capacidad radial: {cap_radial / ton:,.3f} tonf\u00b7m\n'
-                                f'- Relaci\u00f3n D/C = {ratio:.3f} \u2264 1.00  '
-                                f'(sobrante {sobra_pct:.1f}% de la capacidad).'
-                            )
-                        else:
-                            excede_pct = (ratio - 1) * 100
-                            st.error(
-                                f'**FALLA** \u2717 La demanda combinada (Mux, Muy) '
-                                f'**excede** el contorno ACI.\n\n'
-                                f'- \u03c6Mnx uniaxial en Pu = {mx_uni / ton:,.3f} tonf\u00b7m\n'
-                                f'- \u03c6Mny uniaxial en Pu = {my_uni / ton:,.3f} tonf\u00b7m\n'
-                                f'- Demanda radial: {radial / ton:,.3f} tonf\u00b7m  |  '
-                                f'Capacidad radial: {cap_radial / ton:,.3f} tonf\u00b7m\n'
-                                f'- Relaci\u00f3n D/C = {ratio:.3f} > 1.00  '
-                                f'(excede por {excede_pct:.1f}% de la capacidad).\n\n'
-                                f'Sugerencia: aumentar la secci\u00f3n (B, H), el acero '
-                                f'longitudinal, o la resistencia del concreto (f\'c).'
-                            )
+                        cap_radial_str = f'{cap_radial / ton:,.3f} tonf\u00b7m' if cap_radial is not None and cap_radial > 1e-12 else 'N/A'
+
+                    if ratio <= 1:
+                        sobra_pct = (1 - ratio) * 100
+                        st.success(
+                            f'**CUMPLE** \u2713 La demanda combinada (Mux, Muy) est\u00e1 '
+                            f'**dentro** del contorno ACI.\n\n'
+                            f'- \u03c6Mnx uniaxial en Pu = {mx_uni / ton:,.3f} tonf\u00b7m\n'
+                            f'- \u03c6Mny uniaxial en Pu = {my_uni / ton:,.3f} tonf\u00b7m\n'
+                            f'- Demanda radial: {radial / ton:,.3f} tonf\u00b7m  |  '
+                            f'Capacidad radial: {cap_radial_str}\n'
+                            f'- Relaci\u00f3n D/C = {ratio:.3f} \u2264 1.00  '
+                            f'(sobrante {sobra_pct:.1f}% de la capacidad).'
+                        )
+                    else:
+                        excede_pct = (ratio - 1) * 100
+                        st.error(
+                            f'**FALLA** \u2717 La demanda combinada (Mux, Muy) '
+                            f'**excede** el contorno ACI.\n\n'
+                            f'- \u03c6Mnx uniaxial en Pu = {mx_uni / ton:,.3f} tonf\u00b7m\n'
+                            f'- \u03c6Mny uniaxial en Pu = {my_uni / ton:,.3f} tonf\u00b7m\n'
+                            f'- Demanda radial: {radial / ton:,.3f} tonf\u00b7m  |  '
+                            f'Capacidad radial: {cap_radial_str}\n'
+                            f'- Relaci\u00f3n D/C = {ratio:.3f} > 1.00  '
+                            f'(excede por {excede_pct:.1f}% de la capacidad).\n\n'
+                            f'Sugerencia: aumentar la secci\u00f3n (B, H), el acero '
+                            f'longitudinal, o la resistencia del concreto (f\'c).'
+                        )
                         st.caption('D/C = distancia radial de la demanda / distancia radial del contorno en la misma direcci\u00f3n.')
                 except Exception as e:
                     st.error(f'Biaxial: {e}')
