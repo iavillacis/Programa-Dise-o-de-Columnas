@@ -856,7 +856,7 @@ if __name__ == "__main__":
         overflow: hidden !important;
         animation: glow 2.5s ease-in-out infinite !important;
         text-shadow: 0 2px 10px rgba(0,0,0,0.20);
-        width: 100%;
+        min-width: 60%;
     }
     .stButton button::before {
         content: '';
@@ -1071,10 +1071,14 @@ if __name__ == "__main__":
         muy = st.number_input('Muy (tonf\u00b7m)', min_value=0.0, value=6.0, step=1.0)
 
     col1, col2, col3 = st.columns([1, 4, 1])
+    with col1:
+        st.markdown(' ')
     with col2:
         if st.button('CALCULAR'):
             st.session_state.calcular = True
             st.rerun()
+    with col3:
+        st.markdown(' ')
 
     if st.session_state.calcular:
         try:
