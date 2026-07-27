@@ -828,16 +828,6 @@ if __name__ == "__main__":
 
     st.markdown("""
     <style>
-    /* ===== BOTON CALCULAR (animaciones globales, estilo inline tras el boton) ===== */
-    @keyframes glow {
-        0%, 100% { box-shadow: 0 0 30px rgba(2,132,199,0.35), 0 10px 40px rgba(2,132,199,0.25); }
-        50% { box-shadow: 0 0 60px rgba(2,132,199,0.60), 0 14px 55px rgba(2,132,199,0.40); }
-    }
-    @keyframes sweep {
-        0% { transform: translateX(-150%) skewX(-20deg); }
-        100% { transform: translateX(400%) skewX(-20deg); }
-    }
-
     /* ===== EXPANDERS ===== */
     .stExpander {
         border-radius: 12px !important;
@@ -1037,13 +1027,8 @@ if __name__ == "__main__":
             st.rerun()
     st.markdown("""
     <style>
-    @keyframes glow {
-        0%, 100% { box-shadow: 0 0 30px rgba(2,132,199,0.35), 0 10px 40px rgba(2,132,199,0.25); }
-        50% { box-shadow: 0 0 60px rgba(2,132,199,0.60), 0 14px 55px rgba(2,132,199,0.40); }
-    }
-    @keyframes sweep {
-        0% { transform: translateX(-150%) skewX(-20deg); }
-        100% { transform: translateX(400%) skewX(-20deg); }
+    div[data-testid="stButton"] {
+        text-align: center !important;
     }
     button[kind="primary"] {
         font-size: 2rem !important;
@@ -1053,32 +1038,8 @@ if __name__ == "__main__":
         background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 40%, #1e40af 100%) !important;
         color: white !important;
         border: 2px solid rgba(255,255,255,0.25) !important;
-        transition: all 0.3s ease !important;
-        letter-spacing: 0.1em;
         cursor: pointer !important;
-        position: relative !important;
-        overflow: hidden !important;
-        animation: glow 2.5s ease-in-out infinite !important;
-        text-shadow: 0 2px 10px rgba(0,0,0,0.20);
-    }
-    button[kind="primary"]::before {
-        content: '';
-        position: absolute;
-        top: 0; left: -150%;
-        width: 40%;
-        height: 100%;
-        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
-        transform: skewX(-20deg);
-        animation: sweep 3s ease-in-out infinite;
-        pointer-events: none;
-    }
-    button[kind="primary"]:hover {
-        box-shadow: 0 0 80px rgba(2,132,199,0.70), 0 16px 60px rgba(2,132,199,0.45) !important;
-        transform: scale(1.06) !important;
-        border-color: rgba(255,255,255,0.40) !important;
-    }
-    button[kind="primary"]:active {
-        transform: scale(0.94) !important;
+        letter-spacing: 0.1em;
     }
     </style>
     """, unsafe_allow_html=True)
