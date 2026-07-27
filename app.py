@@ -1030,9 +1030,11 @@ if __name__ == "__main__":
         mux = st.number_input('Mux (tonf\u00b7m)', min_value=0.0, value=12.0, step=1.0)
         muy = st.number_input('Muy (tonf\u00b7m)', min_value=0.0, value=6.0, step=1.0)
 
-    if st.button('CALCULAR'):
-        st.session_state.calcular = True
-        st.rerun()
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        if st.button('CALCULAR', type='primary', key='calcular_btn'):
+            st.session_state.calcular = True
+            st.rerun()
     st.markdown("""
     <style>
     @keyframes glow {
@@ -1043,11 +1045,7 @@ if __name__ == "__main__":
         0% { transform: translateX(-150%) skewX(-20deg); }
         100% { transform: translateX(400%) skewX(-20deg); }
     }
-    div[data-testid="stButton"] {
-        text-align: center !important;
-        width: 100% !important;
-    }
-    button {
+    button[kind="primary"] {
         font-size: 2rem !important;
         padding: 1.5rem 5rem !important;
         font-weight: 900 !important;
@@ -1062,9 +1060,8 @@ if __name__ == "__main__":
         overflow: hidden !important;
         animation: glow 2.5s ease-in-out infinite !important;
         text-shadow: 0 2px 10px rgba(0,0,0,0.20);
-        display: inline-block !important;
     }
-    button::before {
+    button[kind="primary"]::before {
         content: '';
         position: absolute;
         top: 0; left: -150%;
@@ -1075,12 +1072,12 @@ if __name__ == "__main__":
         animation: sweep 3s ease-in-out infinite;
         pointer-events: none;
     }
-    button:hover {
+    button[kind="primary"]:hover {
         box-shadow: 0 0 80px rgba(2,132,199,0.70), 0 16px 60px rgba(2,132,199,0.45) !important;
         transform: scale(1.06) !important;
         border-color: rgba(255,255,255,0.40) !important;
     }
-    button:active {
+    button[kind="primary"]:active {
         transform: scale(0.94) !important;
     }
     </style>
