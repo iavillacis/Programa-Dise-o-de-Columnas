@@ -1020,11 +1020,9 @@ if __name__ == "__main__":
         mux = st.number_input('Mux (tonf\u00b7m)', min_value=0.0, value=12.0, step=1.0)
         muy = st.number_input('Muy (tonf\u00b7m)', min_value=0.0, value=6.0, step=1.0)
 
-    col1, col2, col3 = st.columns([4, 9, 2])
-    with col2:
-        if st.button('CALCULAR', type='primary', key='calcular_btn'):
-            st.session_state.calcular = True
-            st.rerun()
+    if st.button('CALCULAR', type='primary', key='calcular_btn'):
+        st.session_state.calcular = True
+        st.rerun()
     st.markdown("""
     <style>
     @keyframes glow {
@@ -1035,9 +1033,13 @@ if __name__ == "__main__":
         0% { transform: translateX(-150%) skewX(-20deg); }
         100% { transform: translateX(400%) skewX(-20deg); }
     }
+    div[data-testid="stButton"] {
+        width: 80% !important;
+        margin-left: 20% !important;
+    }
     button[kind="primary"] {
         font-size: 3rem !important;
-        padding: 3rem 2rem !important;
+        padding: 3rem 1rem !important;
         font-weight: 900 !important;
         border-radius: 24px !important;
         background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 40%, #1e40af 100%) !important;
