@@ -1020,9 +1020,13 @@ if __name__ == "__main__":
         mux = st.number_input('Mux (tonf\u00b7m)', min_value=0.0, value=12.0, step=1.0)
         muy = st.number_input('Muy (tonf\u00b7m)', min_value=0.0, value=6.0, step=1.0)
 
-    if st.button('CALCULAR', type='primary', key='calcular_btn'):
-        st.session_state.calcular = True
-        st.rerun()
+    # El botón se mantiene en una columna central para que conserve una anchura
+    # cómoda en pantallas grandes sin quedar pegado a los bordes.
+    _calc_left, _calc_center, _calc_right = st.columns([1, 7, 1])
+    with _calc_center:
+        if st.button('CALCULAR', type='primary', key='calcular_btn', use_container_width=True):
+            st.session_state.calcular = True
+            st.rerun()
     st.markdown("""
     <style>
     @keyframes glow {
@@ -1033,25 +1037,30 @@ if __name__ == "__main__":
         0% { transform: translateX(-150%) skewX(-20deg); }
         100% { transform: translateX(400%) skewX(-20deg); }
     }
-    div[data-testid="stButton"] {
-        text-align: center !important;
+    /* ===== BOTÓN CALCULAR ===== */
+    div.st-key-calcular_btn,
+    div.st-key-calcular_btn div[data-testid="stButton"] {
+        width: 100% !important;
     }
-    button[data-testid="stBaseButton-primary"] {
-        font-size: 3rem !important;
-        padding: 3rem 2rem !important;
+    div.st-key-calcular_btn button[data-testid="stBaseButton-primary"] {
+        width: 100% !important;
+        min-height: 5.5rem !important;
+        box-sizing: border-box !important;
+        font-size: clamp(1.15rem, 2vw, 1.65rem) !important;
+        padding: 1.15rem 2rem !important;
         font-weight: 900 !important;
-        border-radius: 24px !important;
+        letter-spacing: 0.06em !important;
+        border-radius: 16px !important;
         background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 40%, #1e40af 100%) !important;
         color: white !important;
-        border: 4px solid rgba(255,255,255,0.35) !important;
+        border: 3px solid rgba(255,255,255,0.35) !important;
         cursor: pointer !important;
-        width: 85%;
         position: relative !important;
         overflow: hidden !important;
         animation: glow 2.5s ease-in-out infinite !important;
         text-shadow: 0 2px 10px rgba(0,0,0,0.20);
     }
-    button[data-testid="stBaseButton-primary"]::before {
+    div.st-key-calcular_btn button[data-testid="stBaseButton-primary"]::before {
         content: '';
         position: absolute;
         top: 0; left: -150%;
@@ -1062,13 +1071,13 @@ if __name__ == "__main__":
         animation: sweep 3s ease-in-out infinite;
         pointer-events: none;
     }
-    button[data-testid="stBaseButton-primary"]:hover {
+    div.st-key-calcular_btn button[data-testid="stBaseButton-primary"]:hover {
         box-shadow: 0 0 80px rgba(2,132,199,0.70), 0 16px 60px rgba(2,132,199,0.45) !important;
-        transform: scale(1.06) !important;
+        transform: translateY(-2px) !important;
         border-color: rgba(255,255,255,0.50) !important;
     }
-    button[data-testid="stBaseButton-primary"]:active {
-        transform: scale(0.94) !important;
+    div.st-key-calcular_btn button[data-testid="stBaseButton-primary"]:active {
+        transform: translateY(0) scale(0.98) !important;
     }
     </style>
     """, unsafe_allow_html=True)
