@@ -1044,10 +1044,10 @@ if __name__ == "__main__":
         100% { transform: translateX(400%) skewX(-20deg); }
     }
     div[data-testid="stButton"] {
-        display: flex !important;
-        justify-content: center !important;
+        text-align: center !important;
+        width: 100% !important;
     }
-    div[data-testid="stButton"] button {
+    button {
         font-size: 2rem !important;
         padding: 1.5rem 5rem !important;
         font-weight: 900 !important;
@@ -1062,8 +1062,9 @@ if __name__ == "__main__":
         overflow: hidden !important;
         animation: glow 2.5s ease-in-out infinite !important;
         text-shadow: 0 2px 10px rgba(0,0,0,0.20);
+        display: inline-block !important;
     }
-    div[data-testid="stButton"] button::before {
+    button::before {
         content: '';
         position: absolute;
         top: 0; left: -150%;
@@ -1074,12 +1075,12 @@ if __name__ == "__main__":
         animation: sweep 3s ease-in-out infinite;
         pointer-events: none;
     }
-    div[data-testid="stButton"] button:hover {
+    button:hover {
         box-shadow: 0 0 80px rgba(2,132,199,0.70), 0 16px 60px rgba(2,132,199,0.45) !important;
         transform: scale(1.06) !important;
         border-color: rgba(255,255,255,0.40) !important;
     }
-    div[data-testid="stButton"] button:active {
+    button:active {
         transform: scale(0.94) !important;
     }
     </style>
