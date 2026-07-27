@@ -508,18 +508,12 @@ def _dentro_curva(section, eje, pu, mu):
     _, _, pp, mp, pmax = section.curva_interaccion(eje)
     mp = np.array(mp)
     pp = np.array(pp)
-    mask = mp >= 0
-    mp, pp = mp[mask], pp[mask]
-    idx = np.argsort(mp)
-    mp, pp = mp[idx], pp[idx]
-    # P-M curve is an arch: M increases from 0 to max (compression branch),
-    # then decreases from max back to 0 (tension branch). For a given M
-    # there are two Pn values — np.interp can pick the wrong (tension) one.
-    # Take only the compression branch (peak moment to last point, reversed).
+    # Raw data order (c increasing): tension branch → peak → compression branch.
+    # Take only the compression branch (peak to end), reverse to ascending M.
     peak = np.argmax(mp)
-    mp = mp[peak:][::-1]
-    pp = pp[peak:][::-1]
-    pp_at_mu = float(np.interp(abs(mu), mp, pp, left=0.0, right=0.0))
+    comp_mp = mp[peak:][::-1]
+    comp_pp = pp[peak:][::-1]
+    pp_at_mu = float(np.interp(abs(mu), comp_mp, comp_pp, left=comp_pp[0], right=0.0))
     phi_pmax = 0.65 * pmax
     cumple = pu <= pp_at_mu + 1e-6 and pu <= phi_pmax + 1e-6
     return cumple, pp_at_mu, phi_pmax
