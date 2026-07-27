@@ -512,6 +512,13 @@ def _dentro_curva(section, eje, pu, mu):
     mp, pp = mp[mask], pp[mask]
     idx = np.argsort(mp)
     mp, pp = mp[idx], pp[idx]
+    # P-M curve is an arch: M increases from 0 to max (compression branch),
+    # then decreases from max back to 0 (tension branch). For a given M
+    # there are two Pn values — np.interp can pick the wrong (tension) one.
+    # Take only the compression branch (peak moment to last point, reversed).
+    peak = np.argmax(mp)
+    mp = mp[peak:][::-1]
+    pp = pp[peak:][::-1]
     pp_at_mu = float(np.interp(abs(mu), mp, pp, left=0.0, right=0.0))
     phi_pmax = 0.65 * pmax
     cumple = pu <= pp_at_mu + 1e-6 and pu <= phi_pmax + 1e-6
@@ -1349,33 +1356,33 @@ if __name__ == "__main__":
 
                         cap_radial_str = f'{cap_radial / ton:,.3f} tonf\u00b7m' if cap_radial is not None and cap_radial > 1e-12 else 'N/A'
 
-                    if ratio <= 1:
-                        sobra_pct = (1 - ratio) * 100
-                        st.success(
-                            f'**CUMPLE** \u2713 La demanda combinada (Mux, Muy) est\u00e1 '
-                            f'**dentro** del contorno ACI.\n\n'
-                            f'- \u03c6Mnx uniaxial en Pu = {mx_uni / ton:,.3f} tonf\u00b7m\n'
-                            f'- \u03c6Mny uniaxial en Pu = {my_uni / ton:,.3f} tonf\u00b7m\n'
-                            f'- Demanda radial: {radial / ton:,.3f} tonf\u00b7m  |  '
-                            f'Capacidad radial: {cap_radial_str}\n'
-                            f'- Relaci\u00f3n D/C = {ratio:.3f} \u2264 1.00  '
-                            f'(sobrante {sobra_pct:.1f}% de la capacidad).'
-                        )
-                    else:
-                        excede_pct = (ratio - 1) * 100
-                        st.error(
-                            f'**FALLA** \u2717 La demanda combinada (Mux, Muy) '
-                            f'**excede** el contorno ACI.\n\n'
-                            f'- \u03c6Mnx uniaxial en Pu = {mx_uni / ton:,.3f} tonf\u00b7m\n'
-                            f'- \u03c6Mny uniaxial en Pu = {my_uni / ton:,.3f} tonf\u00b7m\n'
-                            f'- Demanda radial: {radial / ton:,.3f} tonf\u00b7m  |  '
-                            f'Capacidad radial: {cap_radial_str}\n'
-                            f'- Relaci\u00f3n D/C = {ratio:.3f} > 1.00  '
-                            f'(excede por {excede_pct:.1f}% de la capacidad).\n\n'
-                            f'Sugerencia: aumentar la secci\u00f3n (B, H), el acero '
-                            f'longitudinal, o la resistencia del concreto (f\'c).'
-                        )
-                        st.caption('D/C = distancia radial de la demanda / distancia radial del contorno en la misma direcci\u00f3n.')
+                        if ratio <= 1:
+                            sobra_pct = (1 - ratio) * 100
+                            st.success(
+                                f'**CUMPLE** \u2713 La demanda combinada (Mux, Muy) est\u00e1 '
+                                f'**dentro** del contorno ACI.\n\n'
+                                f'- \u03c6Mnx uniaxial en Pu = {mx_uni / ton:,.3f} tonf\u00b7m\n'
+                                f'- \u03c6Mny uniaxial en Pu = {my_uni / ton:,.3f} tonf\u00b7m\n'
+                                f'- Demanda radial: {radial / ton:,.3f} tonf\u00b7m  |  '
+                                f'Capacidad radial: {cap_radial_str}\n'
+                                f'- Relaci\u00f3n D/C = {ratio:.3f} \u2264 1.00  '
+                                f'(sobrante {sobra_pct:.1f}% de la capacidad).'
+                            )
+                        else:
+                            excede_pct = (ratio - 1) * 100
+                            st.error(
+                                f'**FALLA** \u2717 La demanda combinada (Mux, Muy) '
+                                f'**excede** el contorno ACI.\n\n'
+                                f'- \u03c6Mnx uniaxial en Pu = {mx_uni / ton:,.3f} tonf\u00b7m\n'
+                                f'- \u03c6Mny uniaxial en Pu = {my_uni / ton:,.3f} tonf\u00b7m\n'
+                                f'- Demanda radial: {radial / ton:,.3f} tonf\u00b7m  |  '
+                                f'Capacidad radial: {cap_radial_str}\n'
+                                f'- Relaci\u00f3n D/C = {ratio:.3f} > 1.00  '
+                                f'(excede por {excede_pct:.1f}% de la capacidad).\n\n'
+                                f'Sugerencia: aumentar la secci\u00f3n (B, H), el acero '
+                                f'longitudinal, o la resistencia del concreto (f\'c).'
+                            )
+                            st.caption('D/C = distancia radial de la demanda / distancia radial del contorno en la misma direcci\u00f3n.')
                 except Exception as e:
                     st.error(f'Biaxial: {e}')
 
