@@ -829,75 +829,53 @@ if __name__ == "__main__":
     st.markdown("""
     <style>
     /* ===== BOTON CALCULAR ===== */
-    @keyframes btn-glow {
-        0%, 100% { box-shadow: 0 0 25px rgba(2,132,199,0.30), 0 0 60px rgba(14,165,233,0.15), 0 8px 32px rgba(2,132,199,0.25); }
-        50% { box-shadow: 0 0 45px rgba(2,132,199,0.55), 0 0 90px rgba(14,165,233,0.30), 0 12px 48px rgba(2,132,199,0.40); }
+    @keyframes glow {
+        0%, 100% { box-shadow: 0 0 30px rgba(2,132,199,0.35), 0 10px 40px rgba(2,132,199,0.25); }
+        50% { box-shadow: 0 0 60px rgba(2,132,199,0.60), 0 14px 55px rgba(2,132,199,0.40); }
     }
-    @keyframes btn-shimmer {
-        0% { transform: translateX(-120%) skewX(-20deg); }
-        100% { transform: translateX(350%) skewX(-20deg); }
+    @keyframes sweep {
+        0% { transform: translateX(-150%) skewX(-20deg); }
+        100% { transform: translateX(400%) skewX(-20deg); }
     }
-    @keyframes btn-float {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-3px); }
-    }
-    div[data-testid="column"]:nth-of-type(2) .stButton {
+    .stButton {
         display: flex;
         justify-content: center;
     }
-    div[data-testid="column"]:nth-of-type(2) .stButton button {
+    .stButton button {
         font-size: 2rem !important;
-        padding: 1.4rem 4.5rem !important;
+        padding: 1.5rem 5rem !important;
         font-weight: 900 !important;
-        border-radius: 18px !important;
+        border-radius: 20px !important;
         background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 40%, #1e40af 100%) !important;
         color: white !important;
-        box-shadow: 0 0 25px rgba(2,132,199,0.30), 0 0 60px rgba(14,165,233,0.15), 0 8px 32px rgba(2,132,199,0.25) !important;
-        border: 2px solid rgba(255,255,255,0.20) !important;
-        transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
-        letter-spacing: 0.08em;
+        border: 2px solid rgba(255,255,255,0.25) !important;
+        transition: all 0.3s ease !important;
+        letter-spacing: 0.1em;
         cursor: pointer !important;
         position: relative !important;
         overflow: hidden !important;
-        animation: btn-glow 2.5s ease-in-out infinite, btn-float 3s ease-in-out infinite !important;
-        text-shadow: 0 2px 8px rgba(0,0,0,0.15);
-        backdrop-filter: blur(4px);
+        animation: glow 2.5s ease-in-out infinite !important;
+        text-shadow: 0 2px 10px rgba(0,0,0,0.20);
+        width: 100%;
     }
-    div[data-testid="column"]:nth-of-type(2) .stButton button::before {
+    .stButton button::before {
         content: '';
         position: absolute;
-        top: 0; left: -120%;
-        width: 50%;
+        top: 0; left: -150%;
+        width: 40%;
         height: 100%;
-        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.22), transparent);
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
         transform: skewX(-20deg);
-        animation: btn-shimmer 2.8s ease-in-out infinite;
+        animation: sweep 3s ease-in-out infinite;
         pointer-events: none;
     }
-    div[data-testid="column"]:nth-of-type(2) .stButton button::after {
-        content: '';
-        position: absolute;
-        top: -60%;
-        left: -60%;
-        width: 220%;
-        height: 220%;
-        background: radial-gradient(circle, rgba(255,255,255,0.10) 0%, transparent 55%);
-        opacity: 0;
-        transition: opacity 0.5s ease;
-        pointer-events: none;
-    }
-    div[data-testid="column"]:nth-of-type(2) .stButton button:hover {
-        box-shadow: 0 0 60px rgba(2,132,199,0.65), 0 0 120px rgba(14,165,233,0.35), 0 12px 48px rgba(2,132,199,0.50) !important;
-        transform: scale(1.07) translateY(-2px) !important;
+    .stButton button:hover {
+        box-shadow: 0 0 80px rgba(2,132,199,0.70), 0 16px 60px rgba(2,132,199,0.45) !important;
+        transform: scale(1.06) !important;
         border-color: rgba(255,255,255,0.40) !important;
-        animation: btn-glow 1.2s ease-in-out infinite !important;
     }
-    div[data-testid="column"]:nth-of-type(2) .stButton button:hover::after {
-        opacity: 1;
-    }
-    div[data-testid="column"]:nth-of-type(2) .stButton button:active {
-        transform: scale(0.95) !important;
-        box-shadow: 0 0 35px rgba(2,132,199,0.45), 0 4px 20px rgba(2,132,199,0.30) !important;
+    .stButton button:active {
+        transform: scale(0.94) !important;
     }
 
     /* ===== EXPANDERS ===== */
@@ -1092,9 +1070,9 @@ if __name__ == "__main__":
         mux = st.number_input('Mux (tonf\u00b7m)', min_value=0.0, value=12.0, step=1.0)
         muy = st.number_input('Muy (tonf\u00b7m)', min_value=0.0, value=6.0, step=1.0)
 
-    col1, col2, col3 = st.columns([1, 3, 1])
+    col1, col2, col3 = st.columns([1, 4, 1])
     with col2:
-        if st.button('\u26a1 CALCULAR', type='primary', width='stretch'):
+        if st.button('CALCULAR'):
             st.session_state.calcular = True
             st.rerun()
 
