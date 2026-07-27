@@ -843,7 +843,7 @@ if __name__ == "__main__":
     }
     .stButton button {
         font-size: 2rem !important;
-        padding: 1.6rem 5rem !important;
+        padding: 1.5rem 5rem !important;
         font-weight: 900 !important;
         border-radius: 20px !important;
         background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 40%, #1e40af 100%) !important;
@@ -1070,7 +1070,7 @@ if __name__ == "__main__":
         mux = st.number_input('Mux (tonf\u00b7m)', min_value=0.0, value=12.0, step=1.0)
         muy = st.number_input('Muy (tonf\u00b7m)', min_value=0.0, value=6.0, step=1.0)
 
-    col1, col2, col3 = st.columns([1, 6, 1])
+    col1, col2, col3 = st.columns([1, 4, 1])
     with col2:
         if st.button('CALCULAR'):
             st.session_state.calcular = True
