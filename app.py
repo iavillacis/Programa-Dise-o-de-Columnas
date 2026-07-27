@@ -1020,18 +1020,54 @@ if __name__ == "__main__":
         mux = st.number_input('Mux (tonf\u00b7m)', min_value=0.0, value=12.0, step=1.0)
         muy = st.number_input('Muy (tonf\u00b7m)', min_value=0.0, value=6.0, step=1.0)
 
-    col1, col2, col3 = st.columns([3, 2, 3])
+    col1, col2, col3 = st.columns([4, 9, 2])
     with col2:
         if st.button('CALCULAR', type='primary', key='calcular_btn'):
             st.session_state.calcular = True
             st.rerun()
     st.markdown("""
     <style>
+    @keyframes glow {
+        0%, 100% { box-shadow: 0 0 30px rgba(2,132,199,0.35), 0 10px 40px rgba(2,132,199,0.25); }
+        50% { box-shadow: 0 0 60px rgba(2,132,199,0.60), 0 14px 55px rgba(2,132,199,0.40); }
+    }
+    @keyframes sweep {
+        0% { transform: translateX(-150%) skewX(-20deg); }
+        100% { transform: translateX(400%) skewX(-20deg); }
+    }
     button[kind="primary"] {
-        font-size: 2.2rem !important;
-        border: 4px solid rgba(255,255,255,0.4) !important;
-        font-weight: 800 !important;
+        font-size: 3rem !important;
+        padding: 3rem 2rem !important;
+        font-weight: 900 !important;
+        border-radius: 24px !important;
+        background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 40%, #1e40af 100%) !important;
+        color: white !important;
+        border: 4px solid rgba(255,255,255,0.35) !important;
+        cursor: pointer !important;
         width: 100%;
+        position: relative !important;
+        overflow: hidden !important;
+        animation: glow 2.5s ease-in-out infinite !important;
+        text-shadow: 0 2px 10px rgba(0,0,0,0.20);
+    }
+    button[kind="primary"]::before {
+        content: '';
+        position: absolute;
+        top: 0; left: -150%;
+        width: 40%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
+        transform: skewX(-20deg);
+        animation: sweep 3s ease-in-out infinite;
+        pointer-events: none;
+    }
+    button[kind="primary"]:hover {
+        box-shadow: 0 0 80px rgba(2,132,199,0.70), 0 16px 60px rgba(2,132,199,0.45) !important;
+        transform: scale(1.06) !important;
+        border-color: rgba(255,255,255,0.50) !important;
+    }
+    button[kind="primary"]:active {
+        transform: scale(0.94) !important;
     }
     </style>
     """, unsafe_allow_html=True)
